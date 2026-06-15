@@ -12,5 +12,11 @@ build:
 fmt:
 	cargo fmt --all
 
+fmt-check:
+	cargo fmt --all -- --check
+
+clippy:
+	cargo clippy --all --all-targets -- -D warnings
+
 clean:
 	cargo clean

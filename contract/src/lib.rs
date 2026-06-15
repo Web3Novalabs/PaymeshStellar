@@ -36,7 +36,9 @@ impl AutoShareContract {
             members: Vec::new(&env),
         };
 
-        env.storage().persistent().set(&DataKey::Group(id.clone()), &details);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Group(id.clone()), &details);
 
         let key = DataKey::CreatorGroups(creator.clone());
         let mut ids: Vec<BytesN<32>> = env

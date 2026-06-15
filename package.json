@@ -1,0 +1,13 @@
+{
+  "name": "paymeshshellar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PaymeshStellar - Next.js frontend, Express.js backend, and Stellar Soroban smart contract",
+  "scripts": {
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  }
+}
