@@ -87,8 +87,20 @@ fn test_get_groups_by_creator() {
     let id1 = BytesN::from_array(&env, &[4u8; 32]);
     let id2 = BytesN::from_array(&env, &[5u8; 32]);
 
-    client.create(&id1, &String::from_str(&env, "Group 1"), &creator, &1, &token);
-    client.create(&id2, &String::from_str(&env, "Group 2"), &creator, &2, &token);
+    client.create(
+        &id1,
+        &String::from_str(&env, "Group 1"),
+        &creator,
+        &1,
+        &token,
+    );
+    client.create(
+        &id2,
+        &String::from_str(&env, "Group 2"),
+        &creator,
+        &2,
+        &token,
+    );
 
     let groups = client.get_groups_by_creator(&creator);
     assert_eq!(groups.len(), 2);
