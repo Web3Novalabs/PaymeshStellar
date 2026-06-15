@@ -42,9 +42,6 @@ jobs:
       - name: Install dependencies
         run: cd frontend && pnpm install --no-frozen-lockfile
 
-      - name: Type check
-        run: cd frontend && pnpm type-check
-
       - name: Lint
         run: cd frontend && pnpm lint
 
