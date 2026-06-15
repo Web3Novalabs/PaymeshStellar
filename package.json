@@ -1,0 +1,24 @@
+{
+  "name": "paymeshshellar-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PaymeshStellar - Next.js frontend, Express.js backend, and Stellar Soroban smart contract",
+  "scripts": {
+    "frontend:dev": "pnpm --filter frontend dev",
+    "frontend:build": "pnpm --filter frontend build",
+    "frontend:lint": "pnpm --filter frontend lint",
+    "frontend:format": "pnpm --filter frontend format",
+    "backend:dev": "pnpm --filter backend dev",
+    "backend:build": "pnpm --filter backend build",
+    "backend:lint": "pnpm --filter backend lint",
+    "backend:format": "pnpm --filter backend format",
+    "lint:all": "pnpm frontend:lint && pnpm backend:lint",
+    "format:all": "pnpm frontend:format && pnpm backend:format",
+    "format:check": "pnpm frontend:format:check && pnpm backend:format:check",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  }
+}
