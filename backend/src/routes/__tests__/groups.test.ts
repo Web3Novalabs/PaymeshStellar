@@ -1,398 +1,426 @@
-import { after, before, beforeEach, describe, it } from 'node:test';
-import assert from 'node:assert';
-import { Server } from 'http';
+import { describe, it, beforeEach, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import request from 'supertest';
 import { app } from '../../index.js';
-import { groupsService } from '../../services/groups.js';
+import { groupsService, type Group } from '../../services/groups.js';
 import { signToken } from '../../utils/jwt.js';
 
-interface TestGroup {
-  id: string;
-  groupId: string;
-  name: string;
-  creator: string;
-  paymentToken: string;
-  members: { address: string; name: string; percentage: number }[];
-  membersCount: number;
-  createdAt: string;
-}
-
-interface TestApiResponse {
-  success: boolean;
-  data: TestGroup & {
-    groups: TestGroup[];
-    pagination: {
-      total: number;
-      limit: number;
-      offset: number;
-      hasMore: boolean;
-    };
-  };
-  error: {
-    code: string;
-    message: string;
-  };
-}
-
-let server: Server;
-let baseUrl: string;
-
-// Set env for testing
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
 
-const creator1 = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU'; // Valid Stellar address
-const creator2 = 'GAYO55R3JM3OHUB7W52QO7P6CDH5P3WTAF4V6QG4EIVTT6OJZIMIC75W'; // Valid Stellar address
+const creator1 = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU';
+const creator2 = 'GAYO55R3JM3OHUB7W52QO7P6CDH5P3WTAF4V6QG4EIVTT6OJZIMIC75W';
 
 const token1 = signToken({ sub: creator1 });
-const token2 = signToken({ sub: creator2 });
 
-before(() => {
-  server = app.listen(0);
-  const address = server.address();
-  if (address && typeof address === 'object') {
-    baseUrl = `http://localhost:${address.port}/api/groups`;
-  }
+function mockGroup(overrides: Partial<Group> = {}): Group {
+  return {
+    id: 'test-uuid-123',
+    groupId: 'group-on-chain-1',
+    name: 'Engineering Team',
+    creator: creator1,
+    paymentToken: 'payment-token-address',
+    members: [
+      { address: creator1, name: 'Alice', percentage: 70 },
+      { address: creator2, name: 'Bob', percentage: 30 },
+    ],
+    membersCount: 2,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  mock.restoreAll();
 });
 
-after(() => {
-  server.close();
-});
+describe('POST /api/groups', () => {
+  const validPayload = {
+    groupId: 'group-on-chain-1',
+    name: 'Engineering Team',
+    paymentToken: 'payment-token-address',
+    members: [
+      { address: creator1, name: 'Alice', percentage: 70 },
+      { address: creator2, name: 'Bob', percentage: 30 },
+    ],
+  };
 
-beforeEach(async () => {
-  await groupsService.clear();
-});
-
-describe('Groups API Integration Tests', () => {
-  describe('POST /api/groups', () => {
-    it('should return 401 if unauthorized (no token)', async () => {
-      const response = await fetch(baseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          groupId: 'group-1',
-          name: 'Developers',
-          paymentToken: 'token-address',
-          members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-        }),
-      });
-
-      assert.strictEqual(response.status, 401);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'UNAUTHORIZED');
+  it('returns 401 when no auth token is provided', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
     });
 
-    it('should return 401 if invalid token is provided', async () => {
-      const response = await fetch(baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer invalid-token',
-        },
-        body: JSON.stringify({
-          groupId: 'group-1',
-          name: 'Developers',
-          paymentToken: 'token-address',
-          members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-        }),
-      });
+    const res = await request(app).post('/api/groups').send(validPayload).expect(401);
 
-      assert.strictEqual(response.status, 401);
-    });
-
-    it('should return 400 if splits do not total 100%', async () => {
-      const response = await fetch(baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({
-          groupId: 'group-1',
-          name: 'Developers',
-          paymentToken: 'token-address',
-          members: [
-            { address: creator1, name: 'Alice', percentage: 40 },
-            { address: creator2, name: 'Bob', percentage: 50 }, // total 90%
-          ],
-        }),
-      });
-
-      assert.strictEqual(response.status, 400);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'BAD_REQUEST');
-      assert.ok(body.error.message.includes('splits must total 100%'));
-    });
-
-    it('should create group successfully and return 201 with payload', async () => {
-      const response = await fetch(baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({
-          groupId: 'group-on-chain-1',
-          name: 'Engineering Team',
-          paymentToken: 'payment-token-address',
-          members: [
-            { address: creator1, name: 'Alice', percentage: 70 },
-            { address: creator2, name: 'Bob', percentage: 30 },
-          ],
-        }),
-      });
-
-      assert.strictEqual(response.status, 201);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, true);
-
-      const payload = body.data;
-      assert.ok(payload.id);
-      assert.strictEqual(payload.groupId, 'group-on-chain-1');
-      assert.strictEqual(payload.name, 'Engineering Team');
-      assert.strictEqual(payload.creator, creator1);
-      assert.strictEqual(payload.paymentToken, 'payment-token-address');
-      assert.strictEqual(payload.membersCount, 2);
-      assert.ok(payload.createdAt);
-      assert.deepStrictEqual(payload.members, [
-        { address: creator1, name: 'Alice', percentage: 70 },
-        { address: creator2, name: 'Bob', percentage: 30 },
-      ]);
-    });
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(createMock.mock.calls.length, 0);
   });
 
-  describe('GET /api/groups/:id', () => {
-    it('should return 401 if unauthorized', async () => {
-      const response = await fetch(`${baseUrl}/some-id`);
-      assert.strictEqual(response.status, 401);
+  it('returns 401 when an invalid token is provided', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
     });
 
-    it('should return 404 if group does not exist', async () => {
-      const response = await fetch(`${baseUrl}/non-existent-id`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 404);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'NOT_FOUND');
-    });
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', 'Bearer invalid-token')
+      .send(validPayload)
+      .expect(401);
 
-    it("should return 403 if reading another user's group", async () => {
-      // Create group as creator2
-      const created = await groupsService.create({
-        groupId: 'group-2',
-        name: 'Secret Group',
-        creator: creator2,
-        paymentToken: 'token-addr',
-        members: [{ address: creator2, name: 'Bob', percentage: 100 }],
-      });
-
-      // Try reading as creator1 (should fail)
-      const response = await fetch(`${baseUrl}/${created.id}`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 403);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'FORBIDDEN');
-
-      // Read as creator2 (should succeed)
-      const response2 = await fetch(`${baseUrl}/${created.id}`, {
-        headers: { Authorization: `Bearer ${token2}` },
-      });
-      assert.strictEqual(response2.status, 200);
-    });
-
-    it('should return correct group if read by owner', async () => {
-      const created = await groupsService.create({
-        groupId: 'group-1',
-        name: 'My Team',
-        creator: creator1,
-        paymentToken: 'token-addr',
-        members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-      });
-
-      const response = await fetch(`${baseUrl}/${created.id}`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 200);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, true);
-      assert.strictEqual(body.data.id, created.id);
-      assert.strictEqual(body.data.name, 'My Team');
-    });
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(createMock.mock.calls.length, 0);
   });
 
-  describe('GET /api/groups', () => {
-    it('should return 401 if unauthorized', async () => {
-      const response = await fetch(baseUrl);
-      assert.strictEqual(response.status, 401);
+  it('returns 400 when required fields are missing', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
     });
 
-    it('should return 400 if malformed creator address in filter', async () => {
-      const response = await fetch(`${baseUrl}?creator=invalid-address`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 400);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'BAD_REQUEST');
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({ name: 'Incomplete' })
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(createMock.mock.calls.length, 0);
+  });
+
+  it('returns 400 when members array has invalid entries', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
     });
 
-    it("should return 403 if filtering by another user's address", async () => {
-      const response = await fetch(`${baseUrl}?creator=${creator2}`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 403);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, false);
-      assert.strictEqual(body.error.code, 'FORBIDDEN');
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({
+        groupId: 'g-1',
+        name: 'Test',
+        paymentToken: 'token',
+        members: [{ bad: 'data' }],
+      })
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(createMock.mock.calls.length, 0);
+  });
+
+  it('returns 400 when percentage splits do not total 100%', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
     });
 
-    it('should filter correctly and paginate results', async () => {
-      // Create 5 groups for creator1
-      for (let i = 1; i <= 5; i++) {
-        await groupsService.create({
-          groupId: `g-${i}`,
-          name: `Team ${i}`,
-          creator: creator1,
-          paymentToken: 'token-addr',
-          members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-        });
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({
+        groupId: 'g-1',
+        name: 'Test',
+        paymentToken: 'token',
+        members: [
+          { address: creator1, name: 'Alice', percentage: 40 },
+          { address: creator2, name: 'Bob', percentage: 50 },
+        ],
+      })
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.ok(res.body.error.message.includes('splits must total 100%'));
+    assert.strictEqual(createMock.mock.calls.length, 0);
+  });
+
+  it('returns 201 with the created group payload on success', async () => {
+    const expected = mockGroup();
+    const createMock = mock.method(groupsService, 'create', async () => expected);
+
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token1}`)
+      .send(validPayload)
+      .expect(201);
+
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.id, expected.id);
+    assert.strictEqual(res.body.data.groupId, expected.groupId);
+    assert.strictEqual(res.body.data.name, expected.name);
+    assert.strictEqual(res.body.data.creator, expected.creator);
+    assert.strictEqual(res.body.data.paymentToken, expected.paymentToken);
+    assert.strictEqual(res.body.data.membersCount, expected.membersCount);
+    assert.strictEqual(res.body.data.createdAt, expected.createdAt.toISOString());
+    assert.deepStrictEqual(res.body.data.members, expected.members);
+
+    assert.strictEqual(createMock.mock.calls.length, 1);
+    const args = createMock.mock.calls[0].arguments;
+    const data = args[0] as Record<string, unknown>;
+    assert.strictEqual(data.name, 'Engineering Team');
+    assert.strictEqual(data.creator, creator1);
+  });
+});
+
+describe('GET /api/groups/:id', () => {
+  it('returns 401 when no auth token is provided', async () => {
+    const getByIdMock = mock.method(groupsService, 'getById', () => {
+      throw new Error('should not be called');
+    });
+
+    const res = await request(app).get('/api/groups/some-id').expect(401);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(getByIdMock.mock.calls.length, 0);
+  });
+
+  it('returns 404 when the group does not exist', async () => {
+    mock.method(groupsService, 'getById', async () => null);
+
+    const res = await request(app)
+      .get('/api/groups/non-existent-id')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(404);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'NOT_FOUND');
+    assert.strictEqual(res.body.error.message, 'Group not found.');
+  });
+
+  it('returns 403 when accessing another users group', async () => {
+    const group = mockGroup({ creator: creator2 });
+    mock.method(groupsService, 'getById', async () => group);
+
+    const res = await request(app)
+      .get(`/api/groups/${group.id}`)
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(403);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'FORBIDDEN');
+  });
+
+  it('returns 200 with the group when accessed by owner', async () => {
+    const group = mockGroup();
+    mock.method(groupsService, 'getById', async () => group);
+
+    const res = await request(app)
+      .get(`/api/groups/${group.id}`)
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.id, group.id);
+    assert.strictEqual(res.body.data.name, group.name);
+    assert.strictEqual(res.body.data.creator, group.creator);
+  });
+});
+
+describe('GET /api/groups', () => {
+  it('returns 401 when no auth token is provided', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
+
+    const res = await request(app).get('/api/groups').expect(401);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(listMock.mock.calls.length, 0);
+  });
+
+  it('returns 400 for a malformed creator address filter', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
+
+    const res = await request(app)
+      .get('/api/groups?creator=invalid-address')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(listMock.mock.calls.length, 0);
+  });
+
+  it('returns 403 when filtering by another users address', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
+
+    const res = await request(app)
+      .get(`/api/groups?creator=${creator2}`)
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(403);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'FORBIDDEN');
+    assert.strictEqual(listMock.mock.calls.length, 0);
+  });
+
+  it('returns paginated results with correct metadata', async () => {
+    const groups = Array.from({ length: 5 }, (_, i) =>
+      mockGroup({ id: `group-${i}`, groupId: `g-${i}`, name: `Team ${i}` })
+    );
+
+    const listMock = mock.method(
+      groupsService,
+      'list',
+      async (options: { limit?: number; offset?: number }) => {
+        const limit = options.limit ?? 10;
+        const offset = options.offset ?? 0;
+        return {
+          groups: groups.slice(offset, offset + limit),
+          totalCount: groups.length,
+        };
       }
+    );
 
-      // Create 1 group for creator2
-      await groupsService.create({
-        groupId: 'g-other',
-        name: 'Other Team',
-        creator: creator2,
-        paymentToken: 'token-addr',
-        members: [{ address: creator2, name: 'Bob', percentage: 100 }],
-      });
+    const res = await request(app)
+      .get('/api/groups?limit=2&offset=1')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
 
-      // Query list for creator1, page size 2, offset 1
-      const response = await fetch(`${baseUrl}?creator=${creator1}&limit=2&offset=1`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.groups.length, 2);
+    assert.strictEqual(res.body.data.pagination.total, 5);
+    assert.strictEqual(res.body.data.pagination.limit, 2);
+    assert.strictEqual(res.body.data.pagination.offset, 1);
+    assert.strictEqual(res.body.data.pagination.hasMore, true);
 
-      assert.strictEqual(response.status, 200);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, true);
-      assert.strictEqual(body.data.groups.length, 2);
-      assert.strictEqual(body.data.pagination.total, 5);
-      assert.strictEqual(body.data.pagination.limit, 2);
-      assert.strictEqual(body.data.pagination.offset, 1);
-      assert.strictEqual(body.data.pagination.hasMore, true);
-    });
-
-    it('should enforce limit cap of 100', async () => {
-      const response = await fetch(`${baseUrl}?limit=150`, {
-        headers: { Authorization: `Bearer ${token1}` },
-      });
-      assert.strictEqual(response.status, 200);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.data.pagination.limit, 100);
-    });
+    assert.strictEqual(listMock.mock.calls.length, 1);
+    const opts = listMock.mock.calls[0].arguments[0] as {
+      limit: number;
+      offset: number;
+    };
+    assert.strictEqual(opts.limit, 2);
+    assert.strictEqual(opts.offset, 1);
   });
 
-  describe('PUT /api/groups/:id', () => {
-    it('should return 401 if unauthorized', async () => {
-      const response = await fetch(`${baseUrl}/some-id`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Name' }),
-      });
-      assert.strictEqual(response.status, 401);
+  it('enforces a maximum limit of 100', async () => {
+    const listMock = mock.method(groupsService, 'list', async () => ({
+      groups: [],
+      totalCount: 0,
+    }));
+
+    const res = await request(app)
+      .get('/api/groups?limit=150')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    assert.strictEqual(res.body.data.pagination.limit, 100);
+
+    assert.strictEqual(listMock.mock.calls.length, 1);
+    const opts = listMock.mock.calls[0].arguments[0] as { limit: number };
+    assert.strictEqual(opts.limit, 100);
+  });
+
+  it('returns empty result for out-of-range pagination', async () => {
+    const listMock = mock.method(groupsService, 'list', async () => ({
+      groups: [],
+      totalCount: 0,
+    }));
+
+    const res = await request(app)
+      .get('/api/groups?offset=999&limit=10')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.groups.length, 0);
+    assert.strictEqual(res.body.data.pagination.hasMore, false);
+    assert.strictEqual(listMock.mock.calls.length, 1);
+  });
+});
+
+describe('PUT /api/groups/:id', () => {
+  it('returns 401 when no auth token is provided', async () => {
+    const getByIdMock = mock.method(groupsService, 'getById', () => {
+      throw new Error('should not be called');
     });
 
-    it('should return 404 if updating non-existent group', async () => {
-      const response = await fetch(`${baseUrl}/non-existent-id`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({ name: 'New Name' }),
-      });
-      assert.strictEqual(response.status, 404);
-    });
+    const res = await request(app)
+      .put('/api/groups/some-id')
+      .send({ name: 'New Name' })
+      .expect(401);
 
-    it("should return 403 if editing another user's group", async () => {
-      const created = await groupsService.create({
-        groupId: 'g-2',
-        name: 'Group 2',
-        creator: creator2,
-        paymentToken: 'token-addr',
-        members: [{ address: creator2, name: 'Bob', percentage: 100 }],
-      });
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(getByIdMock.mock.calls.length, 0);
+  });
 
-      const response = await fetch(`${baseUrl}/${created.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({ name: 'Hacked Name' }),
-      });
-      assert.strictEqual(response.status, 403);
-    });
+  it('returns 404 when updating a non-existent group', async () => {
+    mock.method(groupsService, 'getById', async () => null);
 
-    it('should return 400 if editing splits to not total 100%', async () => {
-      const created = await groupsService.create({
-        groupId: 'g-1',
-        name: 'Group 1',
-        creator: creator1,
-        paymentToken: 'token-addr',
-        members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-      });
+    const res = await request(app)
+      .put('/api/groups/non-existent-id')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({ name: 'New Name' })
+      .expect(404);
 
-      const response = await fetch(`${baseUrl}/${created.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({
-          members: [{ address: creator1, name: 'Alice', percentage: 50 }],
-        }),
-      });
-      assert.strictEqual(response.status, 400);
-    });
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'NOT_FOUND');
+  });
 
-    it('should update group details successfully', async () => {
-      const created = await groupsService.create({
-        groupId: 'g-1',
-        name: 'Group 1',
-        creator: creator1,
-        paymentToken: 'token-addr',
-        members: [{ address: creator1, name: 'Alice', percentage: 100 }],
-      });
+  it('returns 403 when updating another users group', async () => {
+    mock.method(groupsService, 'getById', async () => mockGroup({ creator: creator2 }));
 
-      const response = await fetch(`${baseUrl}/${created.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token1}`,
-        },
-        body: JSON.stringify({
-          name: 'Updated Group 1',
-          members: [
-            { address: creator1, name: 'Alice', percentage: 80 },
-            { address: creator2, name: 'Bob', percentage: 20 },
-          ],
-        }),
-      });
+    const res = await request(app)
+      .put('/api/groups/some-id')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({ name: 'Hacked Name' })
+      .expect(403);
 
-      assert.strictEqual(response.status, 200);
-      const body = (await response.json()) as unknown as TestApiResponse;
-      assert.strictEqual(body.success, true);
-      assert.strictEqual(body.data.name, 'Updated Group 1');
-      assert.strictEqual(body.data.membersCount, 2);
-      assert.deepStrictEqual(body.data.members, [
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'FORBIDDEN');
+  });
+
+  it('returns 400 when updating splits to not total 100%', async () => {
+    mock.method(groupsService, 'getById', async () => mockGroup());
+
+    const res = await request(app)
+      .put('/api/groups/some-id')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({
+        members: [{ address: creator1, name: 'Alice', percentage: 50 }],
+      })
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+  });
+
+  it('updates group details successfully', async () => {
+    const existing = mockGroup();
+    const updated = mockGroup({
+      name: 'Updated Group',
+      members: [
         { address: creator1, name: 'Alice', percentage: 80 },
         { address: creator2, name: 'Bob', percentage: 20 },
-      ]);
+      ],
+      membersCount: 2,
     });
+
+    mock.method(groupsService, 'getById', async () => existing);
+    const updateMock = mock.method(groupsService, 'update', async () => updated);
+
+    const res = await request(app)
+      .put(`/api/groups/${existing.id}`)
+      .set('Authorization', `Bearer ${token1}`)
+      .send({
+        name: 'Updated Group',
+        members: [
+          { address: creator1, name: 'Alice', percentage: 80 },
+          { address: creator2, name: 'Bob', percentage: 20 },
+        ],
+      })
+      .expect(200);
+
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.name, 'Updated Group');
+    assert.strictEqual(res.body.data.membersCount, 2);
+    assert.strictEqual(updateMock.mock.calls.length, 1);
   });
 });
