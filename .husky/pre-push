@@ -1,0 +1,79 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🚀 Running pre-push checks..."
+
+# 1. Frontend Checks
+echo "▸ Running Frontend Type Check..."
+pnpm typecheck:frontend
+if [ $? -ne 0 ]; then
+  echo "❌ Frontend Type Check failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Frontend Lint..."
+pnpm lint:frontend
+if [ $? -ne 0 ]; then
+  echo "❌ Frontend Lint failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Frontend Build..."
+pnpm build:frontend
+if [ $? -ne 0 ]; then
+  echo "❌ Frontend Build failed! Push aborted."
+  exit 1
+fi
+
+# 2. Backend Checks
+echo "▸ Running Backend Type Check..."
+pnpm typecheck:backend
+if [ $? -ne 0 ]; then
+  echo "❌ Backend Type Check failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Backend Lint..."
+pnpm lint:backend
+if [ $? -ne 0 ]; then
+  echo "❌ Backend Lint failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Backend Build..."
+pnpm build:backend
+if [ $? -ne 0 ]; then
+  echo "❌ Backend Build failed! Push aborted."
+  exit 1
+fi
+
+# 3. Contract Checks
+echo "▸ Running Contract Format Check..."
+pnpm fmt:contract
+if [ $? -ne 0 ]; then
+  echo "❌ Contract Format Check failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Contract Clippy Lints..."
+pnpm clippy:contract
+if [ $? -ne 0 ]; then
+  echo "❌ Contract Clippy check failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Contract Tests..."
+pnpm test:contract
+if [ $? -ne 0 ]; then
+  echo "❌ Contract Tests failed! Push aborted."
+  exit 1
+fi
+
+echo "▸ Running Contract Build..."
+pnpm build:contract
+if [ $? -ne 0 ]; then
+  echo "❌ Contract Build failed! Push aborted."
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed successfully! Proceeding with push."

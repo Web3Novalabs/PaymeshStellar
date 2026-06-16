@@ -4,7 +4,18 @@
   "private": true,
   "description": "PaymeshStellar - Next.js frontend, Express.js backend, and Stellar Soroban smart contract",
   "scripts": {
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "build:frontend": "pnpm --filter frontend build",
+    "lint:frontend": "pnpm --filter frontend lint",
+    "typecheck:frontend": "pnpm --filter frontend type-check",
+    "build:backend": "pnpm --filter backend build",
+    "lint:backend": "pnpm --filter backend lint",
+    "typecheck:backend": "pnpm --filter backend type-check",
+    "build:contract": "cd contract && stellar contract build",
+    "clippy:contract": "cd contract && cargo clippy --all --all-targets -- -D warnings",
+    "test:contract": "cd contract && cargo test",
+    "fmt:contract": "cd contract && cargo fmt --all -- --check",
+    "pre-push:check": "pnpm typecheck:frontend && pnpm lint:frontend && pnpm build:frontend && pnpm typecheck:backend && pnpm lint:backend && pnpm build:backend && pnpm fmt:contract && pnpm clippy:contract && pnpm test:contract && pnpm build:contract"
   },
   "devDependencies": {
     "husky": "^8.0.3",
