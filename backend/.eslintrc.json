@@ -31,7 +31,11 @@
     ],
     "quotes": [
       "error",
-      "single"
+      "single",
+      {
+        "avoidEscape": true
+      }
     ]
+
   }
 }
