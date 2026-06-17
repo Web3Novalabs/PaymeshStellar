@@ -17,4 +17,6 @@ pub trait AutoShareTrait {
     fn get(env: Env, id: BytesN<32>) -> AutoShareDetails;
 
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
+
+    fn distribute(env: Env, caller: Address, group_id: BytesN<32>, total_amount: i128);
 }
