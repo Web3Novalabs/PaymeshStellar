@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import groupsRouter from './routes/groups.js';
+import transactionsRouter from './routes/transactions.js';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.use('/api/groups', groupsRouter);
+app.use('/api/transactions', transactionsRouter);
 
 // Export app for integration tests
 export { app };
