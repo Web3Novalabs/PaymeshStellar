@@ -19,4 +19,15 @@ pub trait AutoShareTrait {
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
 
     fn distribute(env: Env, caller: Address, group_id: BytesN<32>, total_amount: i128);
+
+    /// Pure view: returns the share amounts each member of a group would receive
+    /// for `total_amount`, applying the same rounding logic as `distribute`.
+    /// Does NOT transfer any tokens.
+    fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128>;
+
+    /// Pure view: returns `total * percentage / 10_000` for arbitrary inputs.
+    fn get_calculated_share(env: Env, total: i128, percentage: u32) -> i128;
+
+    /// Pure view: returns the total percentage (basis points) of all members in a group.
+    fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32;
 }
