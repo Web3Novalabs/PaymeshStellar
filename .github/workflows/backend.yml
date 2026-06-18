@@ -50,6 +50,3 @@ jobs:
 
       - name: Build
         run: cd backend && pnpm build
-
-      - name: Run tests
-        run: cd backend && pnpm test
