@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 3,
+    "address": 5,
     "nonce": 0
   },
   "auth": [
@@ -15,47 +15,16 @@
               "function_name": "create",
               "args": [
                 {
-                  "bytes": "0808080808080808080808080808080808080808080808080808080808080808"
+                  "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
                 },
                 {
-                  "string": "Group 1"
+                  "string": "Team D"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
                   "u32": 1
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "create",
-              "args": [
-                {
-                  "bytes": "0909090909090909090909090909090909090909090909090909090909090909"
-                },
-                {
-                  "string": "Group 2"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "u32": 2
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
@@ -117,10 +86,7 @@
                 "val": {
                   "vec": [
                     {
-                      "bytes": "0808080808080808080808080808080808080808080808080808080808080808"
-                    },
-                    {
-                      "bytes": "0909090909090909090909090909090909090909090909090909090909090909"
+                      "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
                     }
                   ]
                 }
@@ -141,7 +107,7 @@
                   "symbol": "Group"
                 },
                 {
-                  "bytes": "0808080808080808080808080808080808080808080808080808080808080808"
+                  "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
                 }
               ]
             },
@@ -161,7 +127,7 @@
                       "symbol": "Group"
                     },
                     {
-                      "bytes": "0808080808080808080808080808080808080808080808080808080808080808"
+                      "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
                     }
                   ]
                 },
@@ -181,7 +147,7 @@
                         "symbol": "id"
                       },
                       "val": {
-                        "bytes": "0808080808080808080808080808080808080808080808080808080808080808"
+                        "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
                       }
                     },
                     {
@@ -197,7 +163,7 @@
                         "symbol": "name"
                       },
                       "val": {
-                        "string": "Group 1"
+                        "string": "Team D"
                       }
                     },
                     {
@@ -214,100 +180,6 @@
                       },
                       "val": {
                         "u32": 1
-                      }
-                    }
-                  ]
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          4095
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "vec": [
-                {
-                  "symbol": "Group"
-                },
-                {
-                  "bytes": "0909090909090909090909090909090909090909090909090909090909090909"
-                }
-              ]
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "vec": [
-                    {
-                      "symbol": "Group"
-                    },
-                    {
-                      "bytes": "0909090909090909090909090909090909090909090909090909090909090909"
-                    }
-                  ]
-                },
-                "durability": "persistent",
-                "val": {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "creator"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "id"
-                      },
-                      "val": {
-                        "bytes": "0909090909090909090909090909090909090909090909090909090909090909"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "members"
-                      },
-                      "val": {
-                        "vec": []
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "name"
-                      },
-                      "val": {
-                        "string": "Group 2"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "payment_token"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "usage_count"
-                      },
-                      "val": {
-                        "u32": 2
                       }
                     }
                   ]
@@ -373,39 +245,6 @@
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 801925984706572462
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 5541220902715666415
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 5541220902715666415
                   }
                 },
                 "durability": "temporary",

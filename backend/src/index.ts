@@ -5,6 +5,7 @@ import transactionsRouter from './routes/transactions.js';
 import { asyncHandler } from './middleware/asyncHandler.js';
 import { requestLogger } from './middleware/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import usersRouter from './routes/users.js';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use('/api/groups', groupsRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 app.use('/api/transactions', transactionsRouter);
+app.use('/api/users', usersRouter);
 
 // Export app for integration tests
 export { app };
