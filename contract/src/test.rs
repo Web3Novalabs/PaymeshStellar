@@ -124,10 +124,10 @@ fn test_update_members_unauthorized() {
 #[test]
 #[ignore]
 fn test_update_members_group_not_found() {
-    let (env, client, creator, _token) = setup_env();
+    let (env, _, _, _token) = setup_env();
     let id = BytesN::from_array(&env, &[99u8; 32]);
 
-    let members = vec![
+    let _members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
@@ -365,7 +365,7 @@ fn test_distribute_negative_amount() {
 #[test]
 #[ignore]
 fn test_distribute_group_not_found() {
-    let (env, client, creator, _token) = setup_env();
+    let (env, _, _, _token) = setup_env();
     let id = BytesN::from_array(&env, &[99u8; 32]);
     let result = base::validators::validate_group_exists(&env, &id);
     assert_eq!(result, Err(AutoShareError::GroupNotFound));
@@ -402,14 +402,14 @@ fn test_distribute_insufficient_balance() {
 
 #[test]
 fn test_validate_amount_zero() {
-    let env = Env::default();
+    let _env = Env::default();
     let result = base::validators::validate_amount(0);
     assert_eq!(result, Err(AutoShareError::InvalidAmount));
 }
 
 #[test]
 fn test_validate_amount_negative() {
-    let env = Env::default();
+    let _env = Env::default();
     let result = base::validators::validate_amount(-1000);
     assert_eq!(result, Err(AutoShareError::InvalidAmount));
 }

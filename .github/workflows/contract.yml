@@ -61,7 +61,7 @@ jobs:
 
       - name: Build
         working-directory: contract
-        run: stellar contract build
+        run: cargo build
 
   test:
     runs-on: ubuntu-latest

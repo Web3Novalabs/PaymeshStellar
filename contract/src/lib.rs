@@ -9,8 +9,8 @@ use base::errors::AutoShareError;
 use base::events;
 use base::types::{AutoShareDetails, DataKey, GroupMember};
 use base::validators::{
-    validate_amount, validate_group_exists, validate_is_creator, validate_member_exists,
-    validate_members_unique, validate_percentages,
+    validate_amount, validate_group_exists, validate_is_creator, validate_members_unique,
+    validate_percentages,
 };
 
 #[contract]
