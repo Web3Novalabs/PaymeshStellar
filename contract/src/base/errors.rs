@@ -10,4 +10,7 @@ pub enum AutoShareError {
     InvalidPercentage = 4,
     InvalidAmount = 5,
     InsufficientBalance = 6,
+    MemberNotFound = 7,
+    DuplicateMember = 8,
+    EmptyMembers = 9,
 }

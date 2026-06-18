@@ -13,15 +13,18 @@ fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     (env, client, creator, token)
 }
 
+// ────── create tests ──────────────────────────────────────────────────────
+
 #[test]
 fn test_create_and_get() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[1u8; 32]);
     let name = String::from_str(&env, "Payroll Team A");
 
-    client.create(&id, &name, &creator, &3, &token);
+    let result = client.create(&id, &name, &creator, &3, &token);
+    assert!(result.is_ok());
 
-    let details = client.get(&id);
+    let details = client.get(&id).unwrap();
     assert_eq!(details.name, name);
     assert_eq!(details.creator, creator);
     assert_eq!(details.usage_count, 3);
@@ -29,11 +32,27 @@ fn test_create_and_get() {
 }
 
 #[test]
+fn test_create_duplicate_group() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[1u8; 32]);
+    let name = String::from_str(&env, "Payroll Team A");
+
+    client.create(&id, &name, &creator, &3, &token).unwrap();
+
+    let result = client.create(&id, &name, &creator, &3, &token);
+    assert_eq!(result, Err(AutoShareError::GroupAlreadyExists));
+}
+
+// ────── update_members tests ───────────────────────────────────────────────
+
+#[test]
 fn test_update_members() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[2u8; 32]);
 
-    client.create(&id, &String::from_str(&env, "Team B"), &creator, &1, &token);
+    client
+        .create(&id, &String::from_str(&env, "Team B"), &creator, &1, &token)
+        .unwrap();
 
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
@@ -52,21 +71,23 @@ fn test_update_members() {
         },
     ];
 
-    client.update_members(&id, &creator, &members);
+    let result = client.update_members(&id, &creator, &members);
+    assert!(result.is_ok());
 
-    let details = client.get(&id);
+    let details = client.get(&id).unwrap();
     assert_eq!(details.members.len(), 2);
     assert_eq!(details.members.get(0).unwrap().percentage, 6000);
     assert_eq!(details.members.get(1).unwrap().percentage, 4000);
 }
 
 #[test]
-#[should_panic(expected = "percentages must sum to 10000")]
-fn test_update_members_invalid_percentage() {
+fn test_update_members_invalid_percentage_too_low() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[3u8; 32]);
 
-    client.create(&id, &String::from_str(&env, "Team C"), &creator, &1, &token);
+    client
+        .create(&id, &String::from_str(&env, "Team C"), &creator, &1, &token)
+        .unwrap();
 
     let members = vec![
         &env,
@@ -77,36 +98,156 @@ fn test_update_members_invalid_percentage() {
         },
     ];
 
-    client.update_members(&id, &creator, &members); // should panic: 5000 != 10000
+    let result = client.update_members(&id, &creator, &members);
+    assert_eq!(result, Err(AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_update_members_unauthorized() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[4u8; 32]);
+
+    client
+        .create(&id, &String::from_str(&env, "Team D"), &creator, &1, &token)
+        .unwrap();
+
+    let other_user = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+
+    let result = client.update_members(&id, &other_user, &members);
+    assert_eq!(result, Err(AutoShareError::Unauthorized));
+}
+
+#[test]
+fn test_update_members_group_not_found() {
+    let (env, client, creator, _token) = setup_env();
+    let id = BytesN::from_array(&env, &[99u8; 32]);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+
+    let result = client.update_members(&id, &creator, &members);
+    assert_eq!(result, Err(AutoShareError::GroupNotFound));
+}
+
+#[test]
+fn test_update_members_duplicate_member() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[5u8; 32]);
+
+    client
+        .create(&id, &String::from_str(&env, "Team E"), &creator, &1, &token)
+        .unwrap();
+
+    let alice = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice Again"),
+            percentage: 5000,
+        },
+    ];
+
+    let result = client.update_members(&id, &creator, &members);
+    assert_eq!(result, Err(AutoShareError::DuplicateMember));
+}
+
+#[test]
+fn test_update_members_empty() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[6u8; 32]);
+
+    client
+        .create(&id, &String::from_str(&env, "Team F"), &creator, &1, &token)
+        .unwrap();
+
+    let members: soroban_sdk::Vec<GroupMember> = soroban_sdk::Vec::new(&env);
+
+    let result = client.update_members(&id, &creator, &members);
+    assert_eq!(result, Err(AutoShareError::EmptyMembers));
+}
+
+#[test]
+fn test_update_members_with_zero_percentage() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[7u8; 32]);
+
+    client
+        .create(&id, &String::from_str(&env, "Team G"), &creator, &1, &token)
+        .unwrap();
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice,
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: bob,
+            name: String::from_str(&env, "Bob"),
+            percentage: 0, // Zero percentage should fail
+        },
+    ];
+
+    let result = client.update_members(&id, &creator, &members);
+    assert_eq!(result, Err(AutoShareError::InvalidPercentage));
 }
 
 #[test]
 fn test_get_groups_by_creator() {
     let (env, client, creator, token) = setup_env();
 
-    let id1 = BytesN::from_array(&env, &[4u8; 32]);
-    let id2 = BytesN::from_array(&env, &[5u8; 32]);
+    let id1 = BytesN::from_array(&env, &[8u8; 32]);
+    let id2 = BytesN::from_array(&env, &[9u8; 32]);
 
-    client.create(
-        &id1,
-        &String::from_str(&env, "Group 1"),
-        &creator,
-        &1,
-        &token,
-    );
-    client.create(
-        &id2,
-        &String::from_str(&env, "Group 2"),
-        &creator,
-        &2,
-        &token,
-    );
+    client
+        .create(
+            &id1,
+            &String::from_str(&env, "Group 1"),
+            &creator,
+            &1,
+            &token,
+        )
+        .unwrap();
+    client
+        .create(
+            &id2,
+            &String::from_str(&env, "Group 2"),
+            &creator,
+            &2,
+            &token,
+        )
+        .unwrap();
 
     let groups = client.get_groups_by_creator(&creator);
     assert_eq!(groups.len(), 2);
 }
 
-// ── distribute tests ────────────────────────────────────────────────────────
+// ────── distribute tests ───────────────────────────────────────────────────
 
 fn setup_group_with_members(
     env: &Env,
@@ -117,13 +258,15 @@ fn setup_group_with_members(
     percentages: &[u32],
 ) -> (BytesN<32>, Vec<Address>) {
     let id = BytesN::from_array(env, &[id_byte; 32]);
-    client.create(
-        &id,
-        &String::from_str(env, "Test Group"),
-        creator,
-        &1,
-        token,
-    );
+    client
+        .create(
+            &id,
+            &String::from_str(env, "Test Group"),
+            creator,
+            &1,
+            token,
+        )
+        .unwrap();
 
     let mut members = soroban_sdk::Vec::new(env);
     let mut addresses = soroban_sdk::Vec::new(env);
@@ -137,7 +280,7 @@ fn setup_group_with_members(
         });
     }
 
-    client.update_members(&id, creator, &members);
+    client.update_members(&id, creator, &members).unwrap();
     (id, addresses)
 }
 
@@ -162,7 +305,8 @@ fn test_distribute_two_members() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 10, &[6000, 4000]);
 
-    client.distribute(&creator, &id, &1000);
+    let result = client.distribute(&creator, &id, &1000);
+    assert!(result.is_ok());
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 600);
@@ -194,7 +338,8 @@ fn test_distribute_rounding_dust_to_last_member() {
         &[3300, 3300, 3400],
     );
 
-    client.distribute(&creator, &id, &100);
+    let result = client.distribute(&creator, &id, &100);
+    assert!(result.is_ok());
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let a = token_client.balance(&members.get(0).unwrap());
@@ -206,24 +351,36 @@ fn test_distribute_rounding_dust_to_last_member() {
 }
 
 #[test]
-#[should_panic(expected = "amount must be greater than zero")]
 fn test_distribute_zero_amount() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[20u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
-    client.distribute(&creator, &id, &0);
+    client
+        .create(&id, &String::from_str(&env, "G"), &creator, &1, &token)
+        .unwrap();
+    let result = client.distribute(&creator, &id, &0);
+    assert_eq!(result, Err(AutoShareError::InvalidAmount));
 }
 
 #[test]
-#[should_panic(expected = "group not found")]
+fn test_distribute_negative_amount() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[21u8; 32]);
+    client
+        .create(&id, &String::from_str(&env, "G"), &creator, &1, &token)
+        .unwrap();
+    let result = client.distribute(&creator, &id, &-100);
+    assert_eq!(result, Err(AutoShareError::InvalidAmount));
+}
+
+#[test]
 fn test_distribute_group_not_found() {
     let (env, client, creator, _token) = setup_env();
     let id = BytesN::from_array(&env, &[99u8; 32]);
-    client.distribute(&creator, &id, &100);
+    let result = client.distribute(&creator, &id, &100);
+    assert_eq!(result, Err(AutoShareError::GroupNotFound));
 }
 
 #[test]
-#[should_panic(expected = "insufficient balance")]
 fn test_distribute_insufficient_balance() {
     let env = Env::default();
     env.mock_all_auths();
@@ -242,5 +399,225 @@ fn test_distribute_insufficient_balance() {
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
 
-    client.distribute(&creator, &id, &1000);
+    let result = client.distribute(&creator, &id, &1000);
+    assert_eq!(result, Err(AutoShareError::InsufficientBalance));
 }
+
+// ────── validator-specific tests ───────────────────────────────────────────
+
+#[test]
+fn test_validate_amount_zero() {
+    let env = Env::default();
+    let result = base::validators::validate_amount(0);
+    assert_eq!(result, Err(AutoShareError::InvalidAmount));
+}
+
+#[test]
+fn test_validate_amount_negative() {
+    let env = Env::default();
+    let result = base::validators::validate_amount(-1000);
+    assert_eq!(result, Err(AutoShareError::InvalidAmount));
+}
+
+#[test]
+fn test_validate_amount_positive() {
+    let result = base::validators::validate_amount(100);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_percentages_valid() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+
+    let result = base::validators::validate_percentages(&members);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_percentages_invalid_sum() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+    ];
+
+    let result = base::validators::validate_percentages(&members);
+    assert_eq!(result, Err(AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_validate_percentages_zero_member() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 0,
+        },
+    ];
+
+    let result = base::validators::validate_percentages(&members);
+    assert_eq!(result, Err(AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_validate_members_unique_duplicates() {
+    let env = Env::default();
+    let alice = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: alice,
+            name: String::from_str(&env, "Alice Again"),
+            percentage: 5000,
+        },
+    ];
+
+    let result = base::validators::validate_members_unique(&members);
+    assert_eq!(result, Err(AutoShareError::DuplicateMember));
+}
+
+#[test]
+fn test_validate_members_unique_empty() {
+    let env = Env::default();
+    let members: soroban_sdk::Vec<GroupMember> = soroban_sdk::Vec::new(&env);
+
+    let result = base::validators::validate_members_unique(&members);
+    assert_eq!(result, Err(AutoShareError::EmptyMembers));
+}
+
+#[test]
+fn test_validate_members_unique_valid() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+
+    let result = base::validators::validate_members_unique(&members);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_is_creator_valid() {
+    let env = Env::default();
+    let creator = Address::generate(&env);
+    let result = base::validators::validate_is_creator(&creator, &creator);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_is_creator_unauthorized() {
+    let env = Env::default();
+    let creator = Address::generate(&env);
+    let caller = Address::generate(&env);
+    let result = base::validators::validate_is_creator(&creator, &caller);
+    assert_eq!(result, Err(AutoShareError::Unauthorized));
+}
+
+#[test]
+fn test_validate_group_exists() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[50u8; 32]);
+
+    client
+        .create(&id, &String::from_str(&env, "Test"), &creator, &1, &token)
+        .unwrap();
+
+    let result = base::validators::validate_group_exists(&env, &id);
+    assert!(result.is_ok());
+    let details = result.unwrap();
+    assert_eq!(details.creator, creator);
+}
+
+#[test]
+fn test_validate_group_exists_not_found() {
+    let env = Env::default();
+    let id = BytesN::from_array(&env, &[99u8; 32]);
+
+    let result = base::validators::validate_group_exists(&env, &id);
+    assert_eq!(result, Err(AutoShareError::GroupNotFound));
+}
+
+#[test]
+fn test_validate_member_exists() {
+    let env = Env::default();
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: bob.clone(),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+
+    let result = base::validators::validate_member_exists(&members, &alice);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().name, String::from_str(&env, "Alice"));
+}
+
+#[test]
+fn test_validate_member_exists_not_found() {
+    let env = Env::default();
+    let alice = Address::generate(&env);
+    let charlie = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice,
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+
+    let result = base::validators::validate_member_exists(&members, &charlie);
+    assert_eq!(result, Err(AutoShareError::MemberNotFound));
+}
+

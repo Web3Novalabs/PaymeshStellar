@@ -5,8 +5,13 @@ pub mod base;
 pub mod interfaces;
 mod test;
 
+use base::errors::AutoShareError;
 use base::events;
 use base::types::{AutoShareDetails, DataKey, GroupMember};
+use base::validators::{
+    validate_amount, validate_group_exists, validate_is_creator, validate_member_exists,
+    validate_members_unique, validate_percentages,
+};
 
 #[contract]
 pub struct AutoShareContract;
@@ -20,11 +25,11 @@ impl AutoShareContract {
         creator: Address,
         usage_count: u32,
         payment_token: Address,
-    ) {
+    ) -> Result<(), AutoShareError> {
         creator.require_auth();
 
         if env.storage().persistent().has(&DataKey::Group(id.clone())) {
-            panic!("group already exists");
+            return Err(AutoShareError::GroupAlreadyExists);
         }
 
         let details = AutoShareDetails {
@@ -50,6 +55,7 @@ impl AutoShareContract {
         env.storage().persistent().set(&key, &ids);
 
         events::group_created(&env, &id, &creator);
+        Ok(())
     }
 
     pub fn update_members(
@@ -57,40 +63,27 @@ impl AutoShareContract {
         id: BytesN<32>,
         caller: Address,
         new_members: Vec<GroupMember>,
-    ) {
+    ) -> Result<(), AutoShareError> {
         caller.require_auth();
 
-        let key = DataKey::Group(id.clone());
-        let mut details: AutoShareDetails = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .expect("group not found");
+        let mut details = validate_group_exists(&env, &id)?;
 
-        if details.creator != caller {
-            panic!("only the creator can update members");
-        }
-
-        let mut total: u32 = 0;
-        for m in new_members.iter() {
-            total += m.percentage;
-        }
-        if total != 10000 {
-            panic!("percentages must sum to 10000");
-        }
+        validate_is_creator(&details.creator, &caller)?;
+        validate_members_unique(&new_members)?;
+        validate_percentages(&new_members)?;
 
         let count = new_members.len();
         details.members = new_members;
-        env.storage().persistent().set(&key, &details);
-
-        events::members_updated(&env, &id, count);
-    }
-
-    pub fn get(env: Env, id: BytesN<32>) -> AutoShareDetails {
         env.storage()
             .persistent()
-            .get(&DataKey::Group(id))
-            .expect("group not found")
+            .set(&DataKey::Group(id.clone()), &details);
+
+        events::members_updated(&env, &id, count);
+        Ok(())
+    }
+
+    pub fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError> {
+        validate_group_exists(&env, &id)
     }
 
     pub fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails> {
@@ -110,25 +103,24 @@ impl AutoShareContract {
         result
     }
 
-    pub fn distribute(env: Env, caller: Address, group_id: BytesN<32>, total_amount: i128) {
+    pub fn distribute(
+        env: Env,
+        caller: Address,
+        group_id: BytesN<32>,
+        total_amount: i128,
+    ) -> Result<(), AutoShareError> {
         caller.require_auth();
 
-        if total_amount <= 0 {
-            panic!("amount must be greater than zero");
-        }
+        validate_amount(total_amount)?;
 
-        let details: AutoShareDetails = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Group(group_id.clone()))
-            .expect("group not found");
+        let details = validate_group_exists(&env, &group_id)?;
 
         let token_client = token::Client::new(&env, &details.payment_token);
 
         let contract_address = env.current_contract_address();
         let balance = token_client.balance(&caller);
         if balance < total_amount {
-            panic!("insufficient balance");
+            return Err(AutoShareError::InsufficientBalance);
         }
 
         // Transfer full amount from caller to contract first
@@ -149,5 +141,7 @@ impl AutoShareContract {
         }
 
         events::distribution_processed(&env, &group_id, total_amount);
+        Ok(())
     }
 }
+
