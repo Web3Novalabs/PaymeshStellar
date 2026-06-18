@@ -17,7 +17,7 @@ on:
       - '.github/workflows/backend.yml'
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     strategy:
@@ -47,30 +47,6 @@ jobs:
 
       - name: Format check
         run: cd backend && pnpm format:check
-
-      - name: Build
-        run: cd backend && pnpm build
-
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-          cache: 'pnpm'
-          cache-dependency-path: backend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: cd backend && pnpm install --no-frozen-lockfile
 
       - name: Build
         run: cd backend && pnpm build
