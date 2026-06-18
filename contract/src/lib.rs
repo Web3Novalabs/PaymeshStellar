@@ -71,6 +71,12 @@ impl AutoShareContract {
         validate_is_creator(&details.creator, &caller)?;
         validate_members_unique(&new_members)?;
         validate_percentages(&new_members)?;
+        if details.creator != caller {
+            panic!("only the creator can update members");
+        }
+        if base::utils::validate_percentages(&new_members).is_err() {
+            panic!("percentages must sum to 10000");
+        }
 
         let count = new_members.len();
         details.members = new_members;
@@ -125,22 +131,51 @@ impl AutoShareContract {
 
         // Transfer full amount from caller to contract first
         token_client.transfer(&caller, &contract_address, &total_amount);
-
-        let mut distributed: i128 = 0;
-        let member_count = details.members.len();
+        let shares = base::utils::distribute_amounts(&env, total_amount, &details.members)
+            .expect("failed to distribute amounts");
 
         for (i, member) in details.members.iter().enumerate() {
-            let share = if i as u32 == member_count - 1 {
-                // Last member gets the remainder to handle rounding dust
-                total_amount - distributed
-            } else {
-                total_amount * (member.percentage as i128) / 10000
-            };
+            let share = shares.get(i as u32).unwrap();
             token_client.transfer(&contract_address, &member.address, &share);
-            distributed += share;
         }
 
         events::distribution_processed(&env, &group_id, total_amount);
         Ok(())
+    }
+
+    /// Returns the computed share each member would receive for `total_amount`,
+    /// using the same floor-division + last-member-dust logic as `distribute`.
+    /// This is a pure read: no tokens are moved.
+    pub fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
+        let details: AutoShareDetails = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Group(group_id))
+            .expect("group not found");
+
+        base::utils::distribute_amounts(&env, total_amount, &details.members)
+            .expect("invalid group configuration")
+    }
+
+    /// Returns `total * percentage / 10_000` for any arbitrary inputs.
+    /// Useful for ad-hoc share preview before calling distribute.
+    pub fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
+        base::utils::calculate_share(total, percentage)
+    }
+
+    /// Returns the sum of all member percentages (in basis points) for a group.
+    /// A healthy group should always return 10000.
+    pub fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
+        let details: AutoShareDetails = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Group(group_id))
+            .expect("group not found");
+
+        let mut sum: u32 = 0;
+        for member in details.members.iter() {
+            sum = sum.saturating_add(member.percentage);
+        }
+        sum
     }
 }
