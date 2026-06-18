@@ -244,3 +244,343 @@ fn test_distribute_insufficient_balance() {
 
     client.distribute(&creator, &id, &1000);
 }
+
+// ── percentage utility tests ───────────────────────────────────────────────
+
+#[test]
+fn test_calculate_share_normal() {
+    let share = base::utils::calculate_share(1000, 2500);
+    assert_eq!(share, 250);
+}
+
+#[test]
+fn test_calculate_share_zero() {
+    let share = base::utils::calculate_share(1000, 0);
+    assert_eq!(share, 0);
+}
+
+#[test]
+fn test_calculate_share_full() {
+    let share = base::utils::calculate_share(1000, 10000);
+    assert_eq!(share, 1000);
+}
+
+#[test]
+fn test_validate_percentages_ok() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+    let res = base::utils::validate_percentages(&members);
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_validate_percentages_too_low() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4999,
+        },
+    ];
+    let res = base::utils::validate_percentages(&members);
+    assert_eq!(res, Err(base::errors::AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_validate_percentages_too_high() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5001,
+        },
+    ];
+    let res = base::utils::validate_percentages(&members);
+    assert_eq!(res, Err(base::errors::AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_validate_percentages_zero() {
+    let env = Env::default();
+    let members = soroban_sdk::Vec::new(&env);
+    let res = base::utils::validate_percentages(&members);
+    assert_eq!(res, Err(base::errors::AutoShareError::InvalidPercentage));
+}
+
+#[test]
+fn test_distribute_amounts_even() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5000,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, 1000, &members).unwrap();
+    assert_eq!(res.len(), 2);
+    assert_eq!(res.get(0).unwrap(), 500);
+    assert_eq!(res.get(1).unwrap(), 500);
+}
+
+#[test]
+fn test_distribute_amounts_indivisible() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 3333,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 3333,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Charlie"),
+            percentage: 3334,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, 100, &members).unwrap();
+    assert_eq!(res.len(), 3);
+    let a = res.get(0).unwrap();
+    let b = res.get(1).unwrap();
+    let c = res.get(2).unwrap();
+    assert_eq!(a, 33);
+    assert_eq!(b, 33);
+    assert_eq!(c, 34); // gets the remaining dust
+    assert_eq!(a + b + c, 100);
+}
+
+#[test]
+fn test_distribute_amounts_single() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, 12345, &members).unwrap();
+    assert_eq!(res.len(), 1);
+    assert_eq!(res.get(0).unwrap(), 12345);
+}
+
+#[test]
+fn test_distribute_amounts_many() {
+    let env = Env::default();
+    let mut members = soroban_sdk::Vec::new(&env);
+    for _ in 0..10 {
+        members.push_back(GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Member"),
+            percentage: 1000,
+        });
+    }
+    let res = base::utils::distribute_amounts(&env, 100000, &members).unwrap();
+    assert_eq!(res.len(), 10);
+    let mut sum = 0;
+    for val in res.iter() {
+        sum += val;
+        assert_eq!(val, 10000);
+    }
+    assert_eq!(sum, 100000);
+}
+
+#[test]
+fn test_distribute_amounts_large() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+    // A large i128 total amount (e.g. 10^30)
+    let total: i128 = 1_000_000_000_000_000_000_000_000_000_000i128;
+    let res = base::utils::distribute_amounts(&env, total, &members).unwrap();
+    assert_eq!(res.len(), 2);
+    let a = res.get(0).unwrap();
+    let b = res.get(1).unwrap();
+    assert_eq!(a, 600_000_000_000_000_000_000_000_000_000i128);
+    assert_eq!(b, 400_000_000_000_000_000_000_000_000_000i128);
+    assert_eq!(a + b, total);
+}
+
+#[test]
+fn test_distribute_amounts_negative() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, -100, &members);
+    assert_eq!(res, Err(base::errors::AutoShareError::InvalidAmount));
+}
+
+#[test]
+fn test_distribute_amounts_one() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5000,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, 1, &members).unwrap();
+    assert_eq!(res.len(), 2);
+    assert_eq!(res.get(0).unwrap(), 0);
+    assert_eq!(res.get(1).unwrap(), 1); // gets the remaining dust unit
+}
+
+#[test]
+fn test_distribute_amounts_zero() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5000,
+        },
+    ];
+    let res = base::utils::distribute_amounts(&env, 0, &members).unwrap();
+    assert_eq!(res.len(), 2);
+    assert_eq!(res.get(0).unwrap(), 0);
+    assert_eq!(res.get(1).unwrap(), 0);
+}
+
+#[test]
+fn test_validate_percentages_large_list() {
+    let env = Env::default();
+    let mut members = soroban_sdk::Vec::new(&env);
+    for _ in 0..100 {
+        members.push_back(GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Member"),
+            percentage: 100, // 100 members * 100 basis points = 10000 (100%)
+        });
+    }
+    let res = base::utils::validate_percentages(&members);
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_get_member_shares_even() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[1u8; 32]);
+    client.create(&id, &String::from_str(&env, "Group"), &creator, &1, &token);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+    client.update_members(&id, &creator, &members);
+    let shares = client.get_member_shares(&id, &1000);
+    assert_eq!(shares.len(), 2);
+    assert_eq!(shares.get(0).unwrap(), 600);
+    assert_eq!(shares.get(1).unwrap(), 400);
+}
+
+#[test]
+fn test_get_calculated_share() {
+    let (env, client, _, _) = setup_env();
+    let share = client.get_calculated_share(&1000, &2500);
+    assert_eq!(share, 250);
+}
+
+#[test]
+fn test_get_total_percentage() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[2u8; 32]);
+    client.create(&id, &String::from_str(&env, "Group2"), &creator, &1, &token);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "A"),
+            percentage: 3333,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "B"),
+            percentage: 3333,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "C"),
+            percentage: 3334,
+        },
+    ];
+    client.update_members(&id, &creator, &members);
+    let total = client.get_total_percentage(&id);
+    assert_eq!(total, 10000);
+}
