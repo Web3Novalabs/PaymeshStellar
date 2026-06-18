@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.{ts,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,json}\"",
     "type-check": "tsc --noEmit",
-    "test": "node --test"
+    "test": "NODE_ENV=test node --import tsx --test src/**/*.test.ts"  
   },
   "dependencies": {
     "dotenv": "^16.3.1",
