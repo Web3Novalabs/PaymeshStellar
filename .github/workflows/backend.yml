@@ -70,6 +70,9 @@ jobs:
 
       - name: Install dependencies
         run: cd backend && pnpm install --no-frozen-lockfile
-
+        
+      - name: Build backend
+        run: cd backend && pnpm build
+        
       - name: Run tests
         run: cd backend && pnpm --filter backend test 2>/dev/null || echo "No tests configured"
