@@ -552,7 +552,7 @@ fn test_get_member_shares_even() {
 
 #[test]
 fn test_get_calculated_share() {
-    let (env, client, _, _) = setup_env();
+    let (_env, client, _, _) = setup_env();
     let share = client.get_calculated_share(&1000, &2500);
     assert_eq!(share, 250);
 }
