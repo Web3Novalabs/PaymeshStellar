@@ -61,7 +61,7 @@ describe('HorizonService', () => {
 
             await assert.rejects(
                 () => horizonService.getAccountDetails(mockAddress),
-                (err: any) => {
+                (err: HorizonError) => {
                     assert.ok(err instanceof HorizonError);
                     assert.equal(err.statusCode, 404);
                     assert.equal(err.code, 'ACCOUNT_NOT_FOUND');
@@ -133,7 +133,7 @@ describe('HorizonService', () => {
             // Next call should be blocked by circuit breaker
             await assert.rejects(
                 () => horizonService.getAccountDetails(mockAddress),
-                (err: any) => {
+                (err: HorizonError) => {
                     assert.equal(err.statusCode, 503);
                     assert.equal(err.code, 'SERVICE_UNAVAILABLE');
                     return true;

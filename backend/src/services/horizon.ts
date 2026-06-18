@@ -260,16 +260,17 @@ export class HorizonService {
 
         try {
             return (await Promise.race([fn(), timeoutPromise])) as T;
-        } catch (error: any) {
-            const status = error.response?.status;
-            const isTransient = status === 429 || (status >= 500 && status < 600) || !status || error.code === 'TIMEOUT';
+        } catch (error: unknown) {
+            const err = error as { response?: { status?: number }; code?: string };
+            const status = err.response?.status;
+            const isTransient = status === 429 || (status !== undefined && status >= 500 && status < 600) || !status || err.code === 'TIMEOUT';
 
             if (isTransient && retries > 0) {
                 // Jittered backoff: delay * (1 + random)
                 const jitter = Math.random() * 200;
                 const nextDelay = delay * 2 + jitter;
 
-                console.warn(`[Horizon] Transient error detected (Status: ${status}, Code: ${error.code}). Retrying in ${Math.round(nextDelay)}ms... (${retries} retries left)`);
+                console.warn(`[Horizon] Transient error detected (Status: ${status}, Code: ${err.code}). Retrying in ${Math.round(nextDelay)}ms... (${retries} retries left)`);
                 await new Promise((resolve) => setTimeout(resolve, nextDelay));
                 return this.withRetry(fn, retries - 1, nextDelay);
             }
