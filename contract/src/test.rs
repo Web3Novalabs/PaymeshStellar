@@ -159,14 +159,8 @@ fn test_distribute_two_members() {
     // Fund the caller
     token_admin.mint(&creator, &1000);
 
-    let (id, members) = setup_group_with_members(
-        &env,
-        &client,
-        &creator,
-        &token_address,
-        10,
-        &[6000, 4000],
-    );
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 10, &[6000, 4000]);
 
     client.distribute(&creator, &id, &1000);
 
@@ -245,14 +239,8 @@ fn test_distribute_insufficient_balance() {
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
     token_admin.mint(&creator, &50);
 
-    let (id, _) = setup_group_with_members(
-        &env,
-        &client,
-        &creator,
-        &token_address,
-        30,
-        &[5000, 5000],
-    );
+    let (id, _) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
 
     client.distribute(&creator, &id, &1000);
 }

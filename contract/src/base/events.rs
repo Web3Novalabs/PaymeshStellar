@@ -11,6 +11,8 @@ pub fn members_updated(env: &Env, id: &BytesN<32>, member_count: u32) {
 }
 
 pub fn distribution_processed(env: &Env, id: &BytesN<32>, total_amount: i128) {
-    env.events()
-        .publish(("autoshare", "distribution_processed"), (id.clone(), total_amount));
+    env.events().publish(
+        ("autoshare", "distribution_processed"),
+        (id.clone(), total_amount),
+    );
 }
