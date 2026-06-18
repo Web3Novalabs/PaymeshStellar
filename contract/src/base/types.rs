@@ -1,7 +1,7 @@
 use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
 
 #[contracttype]
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GroupMember {
     pub address: Address,
     pub name: String,
@@ -9,7 +9,7 @@ pub struct GroupMember {
 }
 
 #[contracttype]
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AutoShareDetails {
     pub id: BytesN<32>,
     pub name: String,

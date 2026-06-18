@@ -221,8 +221,20 @@ fn test_get_groups_by_creator() {
     let id1 = BytesN::from_array(&env, &[8u8; 32]);
     let id2 = BytesN::from_array(&env, &[9u8; 32]);
 
-    client.create(&id1, &String::from_str(&env, "Group 1"), &creator, &1, &token);
-    client.create(&id2, &String::from_str(&env, "Group 2"), &creator, &2, &token);
+    client.create(
+        &id1,
+        &String::from_str(&env, "Group 1"),
+        &creator,
+        &1,
+        &token,
+    );
+    client.create(
+        &id2,
+        &String::from_str(&env, "Group 2"),
+        &creator,
+        &2,
+        &token,
+    );
 
     let groups = client.get_groups_by_creator(&creator);
     assert_eq!(groups.len(), 2);
@@ -239,7 +251,13 @@ fn setup_group_with_members(
     percentages: &[u32],
 ) -> (BytesN<32>, Vec<Address>) {
     let id = BytesN::from_array(env, &[id_byte; 32]);
-    client.create(&id, &String::from_str(env, "Test Group"), creator, &1, token);
+    client.create(
+        &id,
+        &String::from_str(env, "Test Group"),
+        creator,
+        &1,
+        token,
+    );
 
     let mut members = soroban_sdk::Vec::new(env);
     let mut addresses = soroban_sdk::Vec::new(env);
@@ -327,7 +345,10 @@ fn test_distribute_zero_amount() {
     let id = BytesN::from_array(&env, &[20u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
     // validate_amount should reject zero
-    assert_eq!(base::validators::validate_amount(0), Err(AutoShareError::InvalidAmount));
+    assert_eq!(
+        base::validators::validate_amount(0),
+        Err(AutoShareError::InvalidAmount)
+    );
 }
 
 #[test]
@@ -335,7 +356,10 @@ fn test_distribute_negative_amount() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[21u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
-    assert_eq!(base::validators::validate_amount(-100), Err(AutoShareError::InvalidAmount));
+    assert_eq!(
+        base::validators::validate_amount(-100),
+        Err(AutoShareError::InvalidAmount)
+    );
 }
 
 #[test]
