@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String, Vec};
 
 pub mod base;
 pub mod interfaces;
@@ -108,5 +108,46 @@ impl AutoShareContract {
             }
         }
         result
+    }
+
+    pub fn distribute(env: Env, caller: Address, group_id: BytesN<32>, total_amount: i128) {
+        caller.require_auth();
+
+        if total_amount <= 0 {
+            panic!("amount must be greater than zero");
+        }
+
+        let details: AutoShareDetails = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Group(group_id.clone()))
+            .expect("group not found");
+
+        let token_client = token::Client::new(&env, &details.payment_token);
+
+        let contract_address = env.current_contract_address();
+        let balance = token_client.balance(&caller);
+        if balance < total_amount {
+            panic!("insufficient balance");
+        }
+
+        // Transfer full amount from caller to contract first
+        token_client.transfer(&caller, &contract_address, &total_amount);
+
+        let mut distributed: i128 = 0;
+        let member_count = details.members.len();
+
+        for (i, member) in details.members.iter().enumerate() {
+            let share = if i as u32 == member_count - 1 {
+                // Last member gets the remainder to handle rounding dust
+                total_amount - distributed
+            } else {
+                total_amount * (member.percentage as i128) / 10000
+            };
+            token_client.transfer(&contract_address, &member.address, &share);
+            distributed += share;
+        }
+
+        events::distribution_processed(&env, &group_id, total_amount);
     }
 }

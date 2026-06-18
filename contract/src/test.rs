@@ -105,3 +105,142 @@ fn test_get_groups_by_creator() {
     let groups = client.get_groups_by_creator(&creator);
     assert_eq!(groups.len(), 2);
 }
+
+// ── distribute tests ────────────────────────────────────────────────────────
+
+fn setup_group_with_members(
+    env: &Env,
+    client: &AutoShareContractClient,
+    creator: &Address,
+    token: &Address,
+    id_byte: u8,
+    percentages: &[u32],
+) -> (BytesN<32>, Vec<Address>) {
+    let id = BytesN::from_array(env, &[id_byte; 32]);
+    client.create(
+        &id,
+        &String::from_str(env, "Test Group"),
+        creator,
+        &1,
+        token,
+    );
+
+    let mut members = soroban_sdk::Vec::new(env);
+    let mut addresses = soroban_sdk::Vec::new(env);
+    for &pct in percentages {
+        let addr = Address::generate(env);
+        addresses.push_back(addr.clone());
+        members.push_back(GroupMember {
+            address: addr,
+            name: String::from_str(env, "Member"),
+            percentage: pct,
+        });
+    }
+
+    client.update_members(&id, creator, &members);
+    (id, addresses)
+}
+
+#[test]
+fn test_distribute_two_members() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Register real token contract
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+
+    // Fund the caller
+    token_admin.mint(&creator, &1000);
+
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 10, &[6000, 4000]);
+
+    client.distribute(&creator, &id, &1000);
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&members.get(0).unwrap()), 600);
+    assert_eq!(token_client.balance(&members.get(1).unwrap()), 400);
+}
+
+#[test]
+fn test_distribute_rounding_dust_to_last_member() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &100);
+
+    // 33% + 33% + 34% — total must be 10000 bp
+    let (id, members) = setup_group_with_members(
+        &env,
+        &client,
+        &creator,
+        &token_address,
+        11,
+        &[3300, 3300, 3400],
+    );
+
+    client.distribute(&creator, &id, &100);
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    let a = token_client.balance(&members.get(0).unwrap());
+    let b = token_client.balance(&members.get(1).unwrap());
+    let c = token_client.balance(&members.get(2).unwrap());
+
+    // All amounts must add up to exactly 100
+    assert_eq!(a + b + c, 100);
+}
+
+#[test]
+#[should_panic(expected = "amount must be greater than zero")]
+fn test_distribute_zero_amount() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[20u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+    client.distribute(&creator, &id, &0);
+}
+
+#[test]
+#[should_panic(expected = "group not found")]
+fn test_distribute_group_not_found() {
+    let (env, client, creator, _token) = setup_env();
+    let id = BytesN::from_array(&env, &[99u8; 32]);
+    client.distribute(&creator, &id, &100);
+}
+
+#[test]
+#[should_panic(expected = "insufficient balance")]
+fn test_distribute_insufficient_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    // Mint only 50, but try to distribute 1000
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &50);
+
+    let (id, _) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
+
+    client.distribute(&creator, &id, &1000);
+}
