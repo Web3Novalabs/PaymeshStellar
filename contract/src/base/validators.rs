@@ -1,6 +1,6 @@
-use soroban_sdk::{Address, BytesN, Env};
 use crate::base::errors::AutoShareError;
 use crate::base::types::{AutoShareDetails, DataKey, GroupMember};
+use soroban_sdk::{Address, BytesN, Env};
 
 /// Validates that an amount is greater than zero
 pub fn validate_amount(amount: i128) -> Result<(), AutoShareError> {

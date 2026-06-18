@@ -620,4 +620,3 @@ fn test_validate_member_exists_not_found() {
     let result = base::validators::validate_member_exists(&members, &charlie);
     assert_eq!(result, Err(AutoShareError::MemberNotFound));
 }
-
