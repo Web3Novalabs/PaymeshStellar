@@ -3,6 +3,11 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import cors from 'cors';
 import groupsRouter from './routes/groups.js';
+import transactionsRouter from './routes/transactions.js';
+import { asyncHandler } from './middleware/asyncHandler.js';
+import { requestLogger } from './middleware/logger.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import usersRouter from './routes/users.js';
 
 dotenv.config();
 
@@ -35,7 +40,20 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+if (process.env.NODE_ENV === 'test') {
+  app.get(
+    '/__test/error',
+    asyncHandler(async () => {
+      throw new Error('boom');
+    })
+  );
+}
+
 app.use('/api/groups', groupsRouter);
+app.use(notFoundHandler);
+app.use(errorHandler);
+app.use('/api/transactions', transactionsRouter);
+app.use('/api/users', usersRouter);
 
 export { app };
 

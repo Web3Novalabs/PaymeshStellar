@@ -60,7 +60,8 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
         success: false,
         error: {
           code: 'BAD_REQUEST',
-          message: 'Invalid Stellar address format for creator filter.',
+          message:
+            'Missing required fields: groupId, name, paymentToken, and members are required.',
         },
       });
     }
@@ -119,8 +120,8 @@ router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
       return res.status(403).json({
         success: false,
         error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied. You do not have permission to read this group.',
+          code: 'INTERNAL_SERVER_ERROR',
+          message,
         },
       });
     }
@@ -157,20 +158,21 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
       return res.status(403).json({
         success: false,
         error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied. You do not have permission to modify this group.',
+          code: 'INTERNAL_SERVER_ERROR',
+          message,
         },
       });
     }
+  })
+);
 
     const updates: Parameters<typeof groupsService.update>[1] = {};
 
-    if (name !== undefined) updates.name = name;
-    if (paymentToken !== undefined) updates.paymentToken = paymentToken;
+    try {
+      const group = await groupsService.getById(id);
 
-    if (members !== undefined) {
-      if (!Array.isArray(members)) {
-        return res.status(400).json({
+      if (!group) {
+        return res.status(404).json({
           success: false,
           error: { code: 'BAD_REQUEST', message: 'Members must be an array.' },
         });
@@ -181,7 +183,30 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
         return res.status(400).json({ success: false, error: memberError });
       }
 
-      updates.members = members;
+      const updatedGroup = await groupsService.update(id, updates);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: updatedGroup?.id,
+          groupId: updatedGroup?.groupId,
+          name: updatedGroup?.name,
+          creator: updatedGroup?.creator,
+          paymentToken: updatedGroup?.paymentToken,
+          members: updatedGroup?.members,
+          membersCount: updatedGroup?.membersCount,
+          createdAt: updatedGroup?.createdAt,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update group.';
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message,
+        },
+      });
     }
 
     const updatedGroup = await groupsService.update(id, updates);

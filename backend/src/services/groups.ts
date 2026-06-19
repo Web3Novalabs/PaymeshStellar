@@ -21,6 +21,11 @@ export class InMemoryGroupsService implements GroupsService {
     return this.groups.find((g) => g.id === id) ?? null;
   }
 
+  async getByGroupId(groupId: string): Promise<Group | null> {
+    const group = this.groups.find((g) => g.groupId === groupId);
+    return group || null;
+  }
+
   async list(options: {
     limit?: number;
     offset?: number;
