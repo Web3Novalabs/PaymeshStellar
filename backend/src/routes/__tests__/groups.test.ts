@@ -2,7 +2,7 @@ import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { app } from '../../index.js';
-import { groupsService, type Group } from '../../services/groups.js';
+import { groupsService, InMemoryGroupsService, type Group } from '../../services/groups.js';
 import { signToken } from '../../utils/jwt.js';
 
 process.env.NODE_ENV = 'test';
@@ -32,6 +32,21 @@ function mockGroup(overrides: Partial<Group> = {}): Group {
 
 beforeEach(() => {
   mock.restoreAll();
+});
+
+describe('JWT — expired token', () => {
+  it('returns 401 when an expired token is presented', async () => {
+    // sign a token that expired 1 second ago
+    const expiredToken = signToken({ sub: creator1, exp: Math.floor(Date.now() / 1000) - 1 });
+
+    const res = await request(app)
+      .get('/api/groups')
+      .set('Authorization', `Bearer ${expiredToken}`)
+      .expect(401);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+  });
 });
 
 describe('POST /api/groups', () => {
@@ -134,6 +149,30 @@ describe('POST /api/groups', () => {
     assert.strictEqual(createMock.mock.calls.length, 0);
   });
 
+  it('returns 400 when a member percentage is negative', async () => {
+    const createMock = mock.method(groupsService, 'create', () => {
+      throw new Error('should not be called');
+    });
+
+    const res = await request(app)
+      .post('/api/groups')
+      .set('Authorization', `Bearer ${token1}`)
+      .send({
+        groupId: 'g-1',
+        name: 'Test',
+        paymentToken: 'token',
+        members: [
+          { address: creator1, name: 'Alice', percentage: -50 },
+          { address: creator2, name: 'Bob', percentage: 150 },
+        ],
+      })
+      .expect(400);
+
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(createMock.mock.calls.length, 0);
+  });
+
   it('returns 201 with the created group payload on success', async () => {
     const expected = mockGroup();
     const createMock = mock.method(groupsService, 'create', async () => expected);
@@ -214,6 +253,38 @@ describe('GET /api/groups/:id', () => {
     assert.strictEqual(res.body.data.id, group.id);
     assert.strictEqual(res.body.data.name, group.name);
     assert.strictEqual(res.body.data.creator, group.creator);
+  });
+});
+
+describe('GET /api/groups — pagination edge cases', () => {
+  it('treats a non-numeric limit as the default of 10', async () => {
+    const listMock = mock.method(groupsService, 'list', async () => ({
+      groups: [],
+      totalCount: 0,
+    }));
+
+    const res = await request(app)
+      .get('/api/groups?limit=abc')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    assert.strictEqual(res.body.data.pagination.limit, 10);
+    assert.strictEqual(listMock.mock.calls.length, 1);
+  });
+
+  it('treats a negative limit as the default of 10', async () => {
+    const listMock = mock.method(groupsService, 'list', async () => ({
+      groups: [],
+      totalCount: 0,
+    }));
+
+    const res = await request(app)
+      .get('/api/groups?limit=-5')
+      .set('Authorization', `Bearer ${token1}`)
+      .expect(200);
+
+    assert.strictEqual(res.body.data.pagination.limit, 10);
+    assert.strictEqual(listMock.mock.calls.length, 1);
   });
 });
 
@@ -332,6 +403,105 @@ describe('GET /api/groups', () => {
     assert.strictEqual(res.body.data.groups.length, 0);
     assert.strictEqual(res.body.data.pagination.hasMore, false);
     assert.strictEqual(listMock.mock.calls.length, 1);
+  });
+});
+
+describe('InMemoryGroupsService — unit', () => {
+  let svc: InMemoryGroupsService;
+
+  beforeEach(async () => {
+    svc = new InMemoryGroupsService();
+  });
+
+  it('create stores a group and returns it with an id', async () => {
+    const group = await svc.create({
+      groupId: 'g-1',
+      name: 'Team',
+      creator: creator1,
+      paymentToken: 'token',
+      members: [{ address: creator1, name: 'Alice', percentage: 100 }],
+    });
+    assert.ok(group.id);
+    assert.strictEqual(group.membersCount, 1);
+    assert.ok(group.createdAt instanceof Date);
+  });
+
+  it('getById returns null for an unknown id', async () => {
+    const result = await svc.getById('no-such-id');
+    assert.strictEqual(result, null);
+  });
+
+  it('list filters by creator', async () => {
+    await svc.create({
+      groupId: 'g-1',
+      name: 'A',
+      creator: creator1,
+      paymentToken: 't',
+      members: [{ address: creator1, name: 'x', percentage: 100 }],
+    });
+    await svc.create({
+      groupId: 'g-2',
+      name: 'B',
+      creator: creator2,
+      paymentToken: 't',
+      members: [{ address: creator2, name: 'y', percentage: 100 }],
+    });
+
+    const result = await svc.list({ creator: creator1 });
+    assert.strictEqual(result.totalCount, 1);
+    assert.strictEqual(result.groups[0].creator, creator1);
+  });
+
+  it('list respects limit and offset', async () => {
+    for (let i = 0; i < 5; i++) {
+      await svc.create({
+        groupId: `g-${i}`,
+        name: `T${i}`,
+        creator: creator1,
+        paymentToken: 't',
+        members: [{ address: creator1, name: 'x', percentage: 100 }],
+      });
+    }
+    const result = await svc.list({ limit: 2, offset: 1 });
+    assert.strictEqual(result.groups.length, 2);
+    assert.strictEqual(result.totalCount, 5);
+  });
+
+  it('update merges fields and recomputes membersCount', async () => {
+    const group = await svc.create({
+      groupId: 'g-1',
+      name: 'Old',
+      creator: creator1,
+      paymentToken: 't',
+      members: [{ address: creator1, name: 'x', percentage: 100 }],
+    });
+    const updated = await svc.update(group.id, {
+      name: 'New',
+      members: [
+        { address: creator1, name: 'x', percentage: 60 },
+        { address: creator2, name: 'y', percentage: 40 },
+      ],
+    });
+    assert.strictEqual(updated?.name, 'New');
+    assert.strictEqual(updated?.membersCount, 2);
+  });
+
+  it('update returns null for an unknown id', async () => {
+    const result = await svc.update('no-such-id', { name: 'x' });
+    assert.strictEqual(result, null);
+  });
+
+  it('clear empties the store', async () => {
+    await svc.create({
+      groupId: 'g-1',
+      name: 'T',
+      creator: creator1,
+      paymentToken: 't',
+      members: [{ address: creator1, name: 'x', percentage: 100 }],
+    });
+    await svc.clear();
+    const result = await svc.list({});
+    assert.strictEqual(result.totalCount, 0);
   });
 });
 
