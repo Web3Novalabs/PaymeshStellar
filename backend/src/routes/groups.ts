@@ -159,7 +159,10 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
     if (group.creator !== creator) {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'Access denied. You can only update your own groups.' },
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Access denied. You can only update your own groups.',
+        },
       });
     }
 
