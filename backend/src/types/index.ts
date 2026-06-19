@@ -18,6 +18,7 @@ export interface Group {
 export interface GroupsService {
   create(groupData: Omit<Group, 'id' | 'createdAt' | 'membersCount'>): Promise<Group>;
   getById(id: string): Promise<Group | null>;
+  getByGroupId(groupId: string): Promise<Group | null>;
   list(options: {
     limit?: number;
     offset?: number;

@@ -27,6 +27,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: '50kb' }));
+app.use(requestLogger);
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Welcome to PaymeshStellar Backend API' });
@@ -50,10 +51,10 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 app.use('/api/groups', groupsRouter);
-app.use(notFoundHandler);
-app.use(errorHandler);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/users', usersRouter);
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export { app };
 
