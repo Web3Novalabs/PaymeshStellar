@@ -10,9 +10,9 @@ pub fn members_updated(env: &Env, id: &BytesN<32>, member_count: u32) {
         .publish(("autoshare", "members_updated"), (id.clone(), member_count));
 }
 
-pub fn distribution_processed(env: &Env, id: &BytesN<32>, total_amount: i128) {
+pub fn distributed(env: &Env, id: &BytesN<32>, from: &Address, amount: i128) {
     env.events().publish(
-        ("autoshare", "distribution_processed"),
-        (id.clone(), total_amount),
+        ("autoshare", "distributed"),
+        (id.clone(), from.clone(), amount),
     );
 }

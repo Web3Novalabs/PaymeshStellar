@@ -18,7 +18,7 @@ pub trait AutoShareTrait {
 
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
 
-    fn distribute(env: Env, caller: Address, group_id: BytesN<32>, total_amount: i128);
+    fn distribute(env: Env, id: BytesN<32>, from: Address, amount: i128);
 
     /// Pure view: returns the share amounts each member of a group would receive
     /// for `total_amount`, applying the same rounding logic as `distribute`.
