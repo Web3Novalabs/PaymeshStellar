@@ -3,30 +3,29 @@ name: Contract CI
 on:
   push:
     branches:
-    - main
-    - develop
-    - paymesh-stellar-issue   
+      - main
+      - develop
+      - paymesh-stellar-issue
     paths:
-      - 'contract/**'
-      - '.github/workflows/contract.yml'
-pull_request:
-  branches:
-  - main
-  - develop
-  - paymesh-stellar-issue   
+      - "contract/**"
+      - ".github/workflows/contract.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+      - paymesh-stellar-issue
     paths:
-      - 'contract/**'
-      - '.github/workflows/contract.yml'
-
+      - "contract/**"
+      - ".github/workflows/contract.yml"
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Install wasm32 target
+        run: rustup target add wasm32-unknown-unknown
 
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
