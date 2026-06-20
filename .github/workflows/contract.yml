@@ -3,15 +3,17 @@ name: Contract CI
 on:
   push:
     branches:
-      - main
-      - develop
+    - main
+    - develop
+    - paymesh-stellar-issue   
     paths:
       - 'contract/**'
       - '.github/workflows/contract.yml'
-  pull_request:
-    branches:
-      - main
-      - develop
+pull_request:
+  branches:
+  - main
+  - develop
+  - paymesh-stellar-issue   
     paths:
       - 'contract/**'
       - '.github/workflows/contract.yml'
