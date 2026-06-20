@@ -296,7 +296,8 @@ fn test_distribute_two_members() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 10, &[6000, 4000]);
 
-    let from_balance_before = soroban_sdk::token::Client::new(&env, &token_address).balance(&creator);
+    let from_balance_before =
+        soroban_sdk::token::Client::new(&env, &token_address).balance(&creator);
 
     client.distribute(&id, &creator, &1000);
 
@@ -315,8 +316,14 @@ fn test_distribute_two_members() {
     let events = env.events().all();
     assert_eq!(events.len(), 3); // created, members_updated, distributed
     let distributed_event = events.get(2).unwrap();
-    assert_eq!(distributed_event.topics, soroban_sdk::vec![&env, ("autoshare", "distributed")]);
-    assert_eq!(distributed_event.data, soroban_sdk::vec![&env, id.clone(), creator.clone(), 1000i128]);
+    assert_eq!(
+        distributed_event.topics,
+        soroban_sdk::vec![&env, ("autoshare", "distributed")]
+    );
+    assert_eq!(
+        distributed_event.data,
+        soroban_sdk::vec![&env, id.clone(), creator.clone(), 1000i128]
+    );
 }
 
 #[test]
@@ -368,7 +375,13 @@ fn test_distribute_zero_amount() {
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[20u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token_address);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
 
     let result = client.try_distribute(&id, &creator, &0);
     assert!(result.is_err());
@@ -387,7 +400,13 @@ fn test_distribute_negative_amount() {
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[21u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token_address);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
 
     let result = client.try_distribute(&id, &creator, &-100);
     assert!(result.is_err());
@@ -451,7 +470,13 @@ fn test_distribute_empty_members() {
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[22u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token_address);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
 
     // Don't add any members - group has empty members list
     let result = client.try_distribute(&id, &creator, &1000);
@@ -555,15 +580,9 @@ fn test_distribute_many_members() {
     token_admin.mint(&creator, &100000);
 
     // 10 members, each 10%
-    let percentages: Vec<u32> = vec![1000; 10];
-    let (id, members) = setup_group_with_members(
-        &env,
-        &client,
-        &creator,
-        &token_address,
-        25,
-        &percentages,
-    );
+    let percentages: Vec<u32> = (0..10).map(|_| 1000).collect();
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
 
     client.distribute(&id, &creator, &100000);
 
