@@ -71,12 +71,6 @@ impl AutoShareContract {
         validate_is_creator(&details.creator, &caller)?;
         validate_members_unique(&new_members)?;
         validate_percentages(&new_members)?;
-        if details.creator != caller {
-            panic!("only the creator can update members");
-        }
-        if base::utils::validate_percentages(&new_members).is_err() {
-            panic!("percentages must sum to 10000");
-        }
 
         let count = new_members.len();
         details.members = new_members;

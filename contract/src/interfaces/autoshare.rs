@@ -1,5 +1,6 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
+use crate::base::errors::AutoShareError;
 use crate::base::types::{AutoShareDetails, GroupMember};
 
 pub trait AutoShareTrait {
@@ -10,15 +11,20 @@ pub trait AutoShareTrait {
         creator: Address,
         usage_count: u32,
         payment_token: Address,
-    );
+    ) -> Result<(), AutoShareError>;
 
-    fn update_members(env: Env, id: BytesN<32>, caller: Address, new_members: Vec<GroupMember>);
+    fn update_members(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        new_members: Vec<GroupMember>,
+    ) -> Result<(), AutoShareError>;
 
-    fn get(env: Env, id: BytesN<32>) -> AutoShareDetails;
+    fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError>;
 
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
 
-    fn distribute(env: Env, id: BytesN<32>, from: Address, amount: i128);
+    fn distribute(env: Env, id: BytesN<32>, from: Address, amount: i128) -> Result<(), AutoShareError>;
 
     /// Pure view: returns the share amounts each member of a group would receive
     /// for `total_amount`, applying the same rounding logic as `distribute`.
