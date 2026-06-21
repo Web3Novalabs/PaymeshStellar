@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
+use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, Intoval, String};
 use soroban_sdk::testutils::Events;
 fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -314,22 +314,19 @@ fn test_distribute_two_members() {
 
     // Assert ("autoshare", "distributed") event emitted with correct topics/data
     let events = env.events().all();
-    assert_eq!(events.len(), 3); // created, members_updated, distributed
-    let distributed_event = events.get(2).unwrap();
-    assert_eq!(
-    distributed_event.topics,
-    soroban_sdk::vec![
-        &env,
-        (
-            soroban_sdk::Symbol::new(&env, "autoshare"),
-            soroban_sdk::Symbol::new(&env, "distributed")
-        )
-    ]
-);
-    assert_eq!(
-        distributed_event.data,
-        soroban_sdk::vec![&env, id.clone(), creator.clone(), 1000i128]
-    );
+assert_eq!(events.len(), 3); // created, members_updated, distributed
+let distributed_event = events.get(2).unwrap();
+
+let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
+    &env,
+    soroban_sdk::Symbol::new(&env, "autoshare").into(),
+    soroban_sdk::Symbol::new(&env, "distributed").into(),
+];
+assert_eq!(distributed_event.1, expected_topics);
+
+let expected_data: soroban_sdk::Val =
+    (id.clone(), creator.clone(), 1000i128).into_val(&env);
+assert_eq!(distributed_event.2, expected_data);
 }
 
 #[test]
