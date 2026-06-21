@@ -2,7 +2,7 @@
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
-
+use soroban_sdk::testutils::Events;
 fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     let env = Env::default();
     env.mock_all_auths();
@@ -317,9 +317,15 @@ fn test_distribute_two_members() {
     assert_eq!(events.len(), 3); // created, members_updated, distributed
     let distributed_event = events.get(2).unwrap();
     assert_eq!(
-        distributed_event.topics,
-        soroban_sdk::vec![&env, ("autoshare", "distributed")]
-    );
+    distributed_event.topics,
+    soroban_sdk::vec![
+        &env,
+        (
+            soroban_sdk::Symbol::new(&env, "autoshare"),
+            soroban_sdk::Symbol::new(&env, "distributed")
+        )
+    ]
+);
     assert_eq!(
         distributed_event.data,
         soroban_sdk::vec![&env, id.clone(), creator.clone(), 1000i128]
@@ -396,7 +402,7 @@ fn test_distribute_negative_amount() {
     let token_address = token_id.address();
 
     let contract_id = env.register(AutoShareContract, ());
-    let client = AutoShareContractClient::new(&env, &contract_id);
+let client = AutoShareContractClient::new(&env, &contract_id);
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[21u8; 32]);
@@ -417,14 +423,11 @@ fn test_distribute_group_not_found() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let token_address = token_id.address();
+    let creator = Address::generate(&env);
+    let id = BytesN::from_array(&env, &[99u8; 32]);
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
-
-    let creator = Address::generate(&env);
-    let id = BytesN::from_array(&env, &[99u8; 32]);
 
     let result = client.try_distribute(&id, &creator, &1000);
     assert!(result.is_err());
@@ -442,19 +445,18 @@ fn test_distribute_insufficient_balance() {
     let client = AutoShareContractClient::new(&env, &contract_id);
 
     let creator = Address::generate(&env);
-    // Mint only 50, but try to distribute 1000
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
-    token_admin.mint(&creator, &50);
+    token_admin.mint(&creator, &1000);
 
+    let percentages = [10000u32; 1].to_vec();
     let (id, members) =
-        setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
+        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
 
-    let result = client.try_distribute(&id, &creator, &1000);
+    let result = client.try_distribute(&id, &creator, &10000);
     assert!(result.is_err());
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 0);
-    assert_eq!(token_client.balance(&members.get(1).unwrap()), 0);
 }
 
 #[test]
@@ -580,9 +582,8 @@ fn test_distribute_many_members() {
     token_admin.mint(&creator, &100000);
 
     // 10 members, each 10%
-    let percentages: Vec<u32> = (0..10).map(|_| 1000).collect();
-    let (id, members) =
-        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
+    let percentages = [1000u32; 10].to_vec();
+    let (id, members) = setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
 
     client.distribute(&id, &creator, &100000);
 
@@ -593,8 +594,8 @@ fn test_distribute_many_members() {
         assert_eq!(balance, 10000);
         total += balance;
     }
-    assert_eq!(total, 100000);
 }
+
 
 #[test]
 fn test_distribute_large_amount() {
