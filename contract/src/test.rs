@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, Intoval, String};
+use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, IntoVal, String};
 use soroban_sdk::testutils::Events;
 fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -319,8 +319,8 @@ let distributed_event = events.get(2).unwrap();
 
 let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
     &env,
-    soroban_sdk::Symbol::new(&env, "autoshare").into(),
-    soroban_sdk::Symbol::new(&env, "distributed").into(),
+    soroban_sdk::Symbol::new(&env, "autoshare").into_val(&env),
+    soroban_sdk::Symbol::new(&env, "distributed").into_val(&env),
 ];
 assert_eq!(distributed_event.1, expected_topics);
 
