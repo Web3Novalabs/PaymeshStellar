@@ -71,12 +71,6 @@ impl AutoShareContract {
         validate_is_creator(&details.creator, &caller)?;
         validate_members_unique(&new_members)?;
         validate_percentages(&new_members)?;
-        if details.creator != caller {
-            panic!("only the creator can update members");
-        }
-        if base::utils::validate_percentages(&new_members).is_err() {
-            panic!("percentages must sum to 10000");
-        }
 
         let count = new_members.len();
         details.members = new_members;
@@ -111,35 +105,36 @@ impl AutoShareContract {
 
     pub fn distribute(
         env: Env,
-        caller: Address,
-        group_id: BytesN<32>,
-        total_amount: i128,
+        id: BytesN<32>,
+        from: Address,
+        amount: i128,
     ) -> Result<(), AutoShareError> {
-        caller.require_auth();
+        from.require_auth();
 
-        validate_amount(total_amount)?;
+        validate_amount(amount)?;
 
-        let details = validate_group_exists(&env, &group_id)?;
+        let details = validate_group_exists(&env, &id)?;
+
+        if details.members.is_empty() {
+            return Err(AutoShareError::EmptyMembers);
+        }
 
         let token_client = token::Client::new(&env, &details.payment_token);
 
-        let contract_address = env.current_contract_address();
-        let balance = token_client.balance(&caller);
-        if balance < total_amount {
+        let balance = token_client.balance(&from);
+        if balance < amount {
             return Err(AutoShareError::InsufficientBalance);
         }
 
-        // Transfer full amount from caller to contract first
-        token_client.transfer(&caller, &contract_address, &total_amount);
-        let shares = base::utils::distribute_amounts(&env, total_amount, &details.members)
+        let shares = base::utils::distribute_amounts(&env, amount, &details.members)
             .expect("failed to distribute amounts");
 
         for (i, member) in details.members.iter().enumerate() {
             let share = shares.get(i as u32).unwrap();
-            token_client.transfer(&contract_address, &member.address, &share);
+            token_client.transfer(&from, &member.address, &share);
         }
 
-        events::distribution_processed(&env, &group_id, total_amount);
+        events::distributed(&env, &id, &from, amount);
         Ok(())
     }
 
