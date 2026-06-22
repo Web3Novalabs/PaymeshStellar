@@ -1,8 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, IntoVal, TryIntoVal, String};
 use soroban_sdk::testutils::Events;
+use soroban_sdk::{
+    testutils::Address as _, vec, Address, BytesN, Env, IntoVal, String, TryIntoVal,
+};
 fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     let env = Env::default();
     env.mock_all_auths();
@@ -280,7 +282,6 @@ fn test_distribute_two_members() {
     let env = Env::default();
     env.mock_all_auths();
 
-    // Register real token contract
     let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
     let token_address = token_id.address();
 
@@ -289,8 +290,6 @@ fn test_distribute_two_members() {
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
-
-    // Fund the caller
     token_admin.mint(&creator, &1000);
 
     let (id, members) =
@@ -301,32 +300,29 @@ fn test_distribute_two_members() {
 
     client.distribute(&id, &creator, &1000);
 
+    // Capture events immediately after distribute(), before any further
+    // contract calls (e.g. balance checks) can reset the event buffer.
+    let events = env.events().all();
+    assert_eq!(events.len(), 3); // created, members_updated, distributed
+    let distributed_event = events.get(2).unwrap();
+
+    let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
+        &env,
+        String::from_str(&env, "autoshare").into_val(&env),
+        String::from_str(&env, "distributed").into_val(&env),
+    ];
+    assert_eq!(distributed_event.1, expected_topics);
+
+    let actual_data: (BytesN<32>, Address, i128) = distributed_event.2.try_into_val(&env).unwrap();
+    assert_eq!(actual_data, (id.clone(), creator.clone(), 1000i128));
+
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 600);
     assert_eq!(token_client.balance(&members.get(1).unwrap()), 400);
-
-    // Assert sum of all payouts equals amount exactly (zero dust lost)
     assert_eq!(600 + 400, 1000);
 
-    // Assert from balance decreased by exactly amount
     let from_balance_after = token_client.balance(&creator);
     assert_eq!(from_balance_before - from_balance_after, 1000);
-
-    // Assert ("autoshare", "distributed") event emitted with correct topics/data
-    let events = env.events().all();
-assert_eq!(events.len(), 3); // created, members_updated, distributed
-let distributed_event = events.get(2).unwrap();
-
-let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
-    &env,
-    soroban_sdk::Symbol::new(&env, "autoshare").into_val(&env),
-    soroban_sdk::Symbol::new(&env, "distributed").into_val(&env),
-];
-assert_eq!(distributed_event.1, expected_topics);
-
-let actual_data: (BytesN<32>, Address, i128) =
-    distributed_event.2.try_into_val(&env).unwrap();
-assert_eq!(actual_data, (id.clone(), creator.clone(), 1000i128));
 }
 
 #[test]
@@ -399,7 +395,7 @@ fn test_distribute_negative_amount() {
     let token_address = token_id.address();
 
     let contract_id = env.register(AutoShareContract, ());
-let client = AutoShareContractClient::new(&env, &contract_id);
+    let client = AutoShareContractClient::new(&env, &contract_id);
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[21u8; 32]);
@@ -483,6 +479,7 @@ fn test_distribute_empty_members() {
 }
 
 #[test]
+#[should_panic]
 fn test_distribute_requires_auth() {
     let env = Env::default();
     // Do NOT mock_all_auths - this tests actual auth requirement
@@ -500,9 +497,11 @@ fn test_distribute_requires_auth() {
     let (id, _members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 28, &[6000, 4000]);
 
-    // This should fail because we didn't authorize the creator
-    let result = client.try_distribute(&id, &creator, &1000);
-    assert!(result.is_err());
+    // Unauthorized calls panic in Soroban's auth host rather than returning Err,
+    // so we assert on the panic itself instead of unwrapping a Result.
+    // This call panics because auth was never mocked/authorized.
+    // #[should_panic] on the test asserts that this panic is expected.
+    client.distribute(&id, &creator, &1000);
 }
 
 #[test]
@@ -580,7 +579,8 @@ fn test_distribute_many_members() {
 
     // 10 members, each 10%
     let percentages = [1000u32; 10].to_vec();
-    let (id, members) = setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
 
     client.distribute(&id, &creator, &100000);
 
@@ -591,8 +591,8 @@ fn test_distribute_many_members() {
         assert_eq!(balance, 10000);
         total += balance;
     }
+    assert_eq!(total, 100000);
 }
-
 
 #[test]
 fn test_distribute_large_amount() {
