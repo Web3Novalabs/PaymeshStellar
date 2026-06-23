@@ -1209,3 +1209,98 @@ fn test_get_total_percentage() {
     let total = client.get_total_percentage(&id);
     assert_eq!(total, 10000);
 }
+
+// ── error enum / message tests (issue #54) ────────────────────────────────
+
+#[test]
+fn test_error_messages_are_non_empty() {
+    let errors = [
+        AutoShareError::GroupAlreadyExists,
+        AutoShareError::GroupNotFound,
+        AutoShareError::Unauthorized,
+        AutoShareError::InvalidPercentage,
+        AutoShareError::InvalidAmount,
+        AutoShareError::InsufficientBalance,
+        AutoShareError::MemberNotFound,
+        AutoShareError::DuplicateMember,
+        AutoShareError::EmptyMembers,
+        AutoShareError::UnauthorizedAccess,
+        AutoShareError::InvalidGroupId,
+    ];
+    for err in errors.iter() {
+        let msg = err.message();
+        assert!(!msg.is_empty(), "message() must not be empty for {:?}", err);
+        assert!(
+            msg.len() <= 100,
+            "message() must be ≤ 100 chars for {:?}",
+            err
+        );
+    }
+}
+
+#[test]
+fn test_error_message_invalid_percentage() {
+    let err = AutoShareError::InvalidPercentage;
+    assert_eq!(
+        err.message(),
+        "Invalid percentage. Member percentages must sum to 10000 basis points."
+    );
+}
+
+#[test]
+fn test_error_message_member_not_found() {
+    let err = AutoShareError::MemberNotFound;
+    assert_eq!(
+        err.message(),
+        "Member not found. Verify the member address belongs to this group."
+    );
+}
+
+#[test]
+fn test_error_message_unauthorized_access() {
+    let err = AutoShareError::UnauthorizedAccess;
+    assert_eq!(
+        err.message(),
+        "Unauthorized access. You do not have permission to perform this action."
+    );
+}
+
+#[test]
+fn test_error_message_invalid_amount() {
+    let err = AutoShareError::InvalidAmount;
+    assert_eq!(
+        err.message(),
+        "Invalid amount. Amount must be a positive integer greater than zero."
+    );
+}
+
+#[test]
+fn test_error_message_invalid_group_id() {
+    let err = AutoShareError::InvalidGroupId;
+    assert_eq!(
+        err.message(),
+        "Invalid group ID. The provided group ID does not exist or is malformed."
+    );
+}
+
+#[test]
+fn test_unauthorized_access_variant_distinct_from_unauthorized() {
+    let a = AutoShareError::Unauthorized;
+    let b = AutoShareError::UnauthorizedAccess;
+    assert_ne!(a, b);
+    assert_ne!(a.message(), b.message());
+}
+
+#[test]
+fn test_invalid_group_id_variant_distinct_from_group_not_found() {
+    let a = AutoShareError::GroupNotFound;
+    let b = AutoShareError::InvalidGroupId;
+    assert_ne!(a, b);
+    assert_ne!(a.message(), b.message());
+}
+
+#[test]
+fn test_error_discriminants() {
+    assert_eq!(AutoShareError::UnauthorizedAccess as u32, 10);
+    assert_eq!(AutoShareError::InvalidGroupId as u32, 11);
+}
