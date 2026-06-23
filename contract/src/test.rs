@@ -1209,3 +1209,260 @@ fn test_get_total_percentage() {
     let total = client.get_total_percentage(&id);
     assert_eq!(total, 10000);
 }
+
+// ── update_members comprehensive tests (issue #65) ────────────────────────
+
+/// Percentage sum = 9999 must be rejected with an error.
+#[test]
+fn test_update_members_sum_9999_rejected() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[30u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4999,
+        },
+    ];
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
+}
+
+/// Percentage sum = 10001 must be rejected with an error.
+#[test]
+fn test_update_members_sum_10001_rejected() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[31u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5001,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5000,
+        },
+    ];
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
+}
+
+/// A caller who is not the creator must be rejected.
+#[test]
+fn test_update_members_non_creator_rejected() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[32u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let other = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    let result = client.try_update_members(&id, &other, &members);
+    assert!(result.is_err());
+}
+
+/// update_members on a non-existent group must be rejected.
+#[test]
+fn test_update_members_unknown_group_rejected() {
+    let (env, client, _creator, _token) = setup_env();
+    let id = BytesN::from_array(&env, &[33u8; 32]);
+
+    let caller = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    let result = client.try_update_members(&id, &caller, &members);
+    assert!(result.is_err());
+}
+
+/// The second call completely replaces the first member set; old members must be gone.
+#[test]
+fn test_update_members_replaces_existing_set() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[34u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let first_set = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: bob.clone(),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+    client.update_members(&id, &creator, &first_set);
+    assert_eq!(client.get(&id).members.len(), 2);
+
+    let charlie = Address::generate(&env);
+    let second_set = vec![
+        &env,
+        GroupMember {
+            address: charlie.clone(),
+            name: String::from_str(&env, "Charlie"),
+            percentage: 10000,
+        },
+    ];
+    client.update_members(&id, &creator, &second_set);
+
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 1);
+    assert_eq!(details.members.get(0).unwrap().address, charlie);
+}
+
+/// A member with 0 basis points must cause the update to fail.
+#[test]
+fn test_update_members_zero_bp_member_rejected() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[35u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 0,
+        },
+    ];
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
+}
+
+/// A single member assigned all 10000 basis points is a valid update.
+#[test]
+fn test_update_members_single_member_10000_bp() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[36u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let alice = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    client.update_members(&id, &creator, &members);
+
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 1);
+    assert_eq!(details.members.get(0).unwrap().percentage, 10000);
+    assert_eq!(details.members.get(0).unwrap().address, alice);
+}
+
+/// An empty member list must be rejected.
+#[test]
+fn test_update_members_empty_list_rejected() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[37u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let members: soroban_sdk::Vec<GroupMember> = soroban_sdk::Vec::new(&env);
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
+}
+
+/// Boundary: 10 members each at 1000 bp (10%) sums to exactly 10000.
+#[test]
+fn test_update_members_many_members_boundary() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[38u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let mut members = soroban_sdk::Vec::new(&env);
+    for _ in 0..10 {
+        members.push_back(GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Member"),
+            percentage: 1000,
+        });
+    }
+    client.update_members(&id, &creator, &members);
+
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 10);
+
+    let mut sum: u32 = 0;
+    for member in details.members.iter() {
+        sum += member.percentage;
+    }
+    assert_eq!(sum, 10000);
+}
+
+/// The members_updated event must be emitted with the correct member count.
+#[test]
+fn test_update_members_event_emitted() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[39u8; 32]);
+    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 6000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 4000,
+        },
+    ];
+    client.update_members(&id, &creator, &members);
+
+    let events = env.events().all();
+    // Event 0 = group_created, Event 1 = members_updated
+    assert_eq!(events.len(), 2);
+
+    let update_event = events.get(1).unwrap();
+
+    let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
+        &env,
+        String::from_str(&env, "autoshare").into_val(&env),
+        String::from_str(&env, "members_updated").into_val(&env),
+    ];
+    assert_eq!(update_event.1, expected_topics);
+
+    let actual_data: (BytesN<32>, u32) = update_event.2.try_into_val(&env).unwrap();
+    assert_eq!(actual_data, (id.clone(), 2u32));
+}
