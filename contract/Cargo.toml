@@ -6,7 +6,7 @@ publish = false
 
 [lib]
 crate-type = ["lib", "cdylib"]
-doctest = false
+doctest = true
 
 [dependencies]
 soroban-sdk = "22.0.0"

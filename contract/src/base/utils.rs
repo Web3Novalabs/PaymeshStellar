@@ -1,9 +1,16 @@
+//! Basis-point calculations and deterministic distribution helpers.
+
 use crate::base::errors::AutoShareError;
 use crate::base::types::GroupMember;
 use soroban_sdk::{Env, Vec};
 
-/// Calculates a member's share: total * percentage / 10000.
-/// Uses checked multiplication to prevent overflow issues on large total amounts.
+/// Calculates a member share as `total * percentage / 10_000`.
+///
+/// `percentage` is expressed in basis points, where `10_000` equals 100%.
+///
+/// # Panics
+///
+/// Panics if the intermediate multiplication overflows `i128`.
 pub fn calculate_share(total: i128, percentage: u32) -> i128 {
     total
         .checked_mul(percentage as i128)
@@ -11,7 +18,12 @@ pub fn calculate_share(total: i128, percentage: u32) -> i128 {
         / 10000
 }
 
-/// Validates that the percentages (basis points) of all members sum to exactly 10000 (100%).
+/// Validates that member percentages total exactly `10_000` basis points.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidPercentage`] if addition overflows or the
+/// final total is not `10_000`.
 pub fn validate_percentages(members: &Vec<GroupMember>) -> Result<(), AutoShareError> {
     let mut sum: u32 = 0;
     for member in members.iter() {
@@ -26,10 +38,15 @@ pub fn validate_percentages(members: &Vec<GroupMember>) -> Result<(), AutoShareE
     }
 }
 
-/// Splits total by basis points with deterministic remainder handling so payouts sum exactly to total.
-/// Rounds down using floor division and assigns any remaining dust to the last member.
-/// Returns `AutoShareError::InvalidAmount` if the total is negative.
-/// Returns `AutoShareError::InvalidPercentage` if the member percentages do not validate correctly.
+/// Splits `total` using basis points and deterministic remainder handling.
+///
+/// Every share except the last uses floor division. The final member receives
+/// the remainder so all shares sum exactly to `total`.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidAmount`] for a negative total and
+/// [`AutoShareError::InvalidPercentage`] for an invalid member configuration.
 pub fn distribute_amounts(
     env: &Env,
     total: i128,

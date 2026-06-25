@@ -1,8 +1,14 @@
+//! Validation helpers used by contract entrypoints.
+
 use crate::base::errors::AutoShareError;
 use crate::base::types::{AutoShareDetails, DataKey, GroupMember};
 use soroban_sdk::{Address, BytesN, Env};
 
-/// Validates that an amount is greater than zero
+/// Validates that a distribution amount is greater than zero.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidAmount`] when `amount` is zero or negative.
 pub fn validate_amount(amount: i128) -> Result<(), AutoShareError> {
     if amount <= 0 {
         Err(AutoShareError::InvalidAmount)
@@ -11,8 +17,12 @@ pub fn validate_amount(amount: i128) -> Result<(), AutoShareError> {
     }
 }
 
-/// Validates that members' percentages sum to 10000 (100% in basis points)
-/// and that no member has zero percentage
+/// Validates non-zero percentages totaling `10_000` basis points.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidPercentage`] if any percentage is zero or
+/// the total is not exactly `10_000`.
 pub fn validate_percentages(members: &soroban_sdk::Vec<GroupMember>) -> Result<(), AutoShareError> {
     let mut total: u32 = 0;
     for member in members.iter() {
@@ -28,7 +38,11 @@ pub fn validate_percentages(members: &soroban_sdk::Vec<GroupMember>) -> Result<(
     }
 }
 
-/// Validates that a group exists in storage and returns it
+/// Loads an existing group from persistent storage.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::GroupNotFound`] when `id` is not stored.
 pub fn validate_group_exists(
     env: &Env,
     id: &BytesN<32>,
@@ -39,7 +53,11 @@ pub fn validate_group_exists(
         .ok_or(AutoShareError::GroupNotFound)
 }
 
-/// Validates that a member exists in the members list
+/// Finds a member by address.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::MemberNotFound`] when the address is absent.
 pub fn validate_member_exists(
     members: &soroban_sdk::Vec<GroupMember>,
     address: &Address,
@@ -52,7 +70,11 @@ pub fn validate_member_exists(
     Err(AutoShareError::MemberNotFound)
 }
 
-/// Validates that the caller is the creator
+/// Checks that `caller` is the stored group creator.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::Unauthorized`] when the addresses differ.
 pub fn validate_is_creator(creator: &Address, caller: &Address) -> Result<(), AutoShareError> {
     if creator == caller {
         Ok(())
@@ -61,7 +83,12 @@ pub fn validate_is_creator(creator: &Address, caller: &Address) -> Result<(), Au
     }
 }
 
-/// Validates that members list is not empty and contains no duplicates
+/// Validates that a member list is non-empty and has unique addresses.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::EmptyMembers`] for an empty list or
+/// [`AutoShareError::DuplicateMember`] when an address occurs more than once.
 pub fn validate_members_unique(
     members: &soroban_sdk::Vec<GroupMember>,
 ) -> Result<(), AutoShareError> {
@@ -69,7 +96,8 @@ pub fn validate_members_unique(
         return Err(AutoShareError::EmptyMembers);
     }
 
-    // Check for duplicates
+    // Lists are intentionally small, so pairwise comparison avoids temporary
+    // storage and keeps the contract representation simple.
     for i in 0..members.len() {
         let current = members.get(i).unwrap();
         for j in (i + 1)..members.len() {
