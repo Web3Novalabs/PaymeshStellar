@@ -15,13 +15,13 @@ pub mod base;
 pub mod interfaces;
 mod test;
 
+use base::auth::{
+    require_group_creator, validate_amount, validate_group_exists, validate_members_unique,
+    validate_percentages,
+};
 use base::errors::AutoShareError;
 use base::events;
 use base::types::{AutoShareDetails, DataKey, GroupMember};
-use base::validators::{
-    validate_amount, validate_group_exists, validate_is_creator, validate_members_unique,
-    validate_percentages,
-};
 
 mod contract_impl {
     #![allow(missing_docs)]
@@ -125,11 +125,9 @@ mod contract_impl {
             caller: Address,
             new_members: Vec<GroupMember>,
         ) -> Result<(), AutoShareError> {
-            caller.require_auth();
-
             let mut details = validate_group_exists(&env, &id)?;
 
-            validate_is_creator(&details.creator, &caller)?;
+            require_group_creator(&env, &details, &caller)?;
             validate_members_unique(&new_members)?;
             validate_percentages(&new_members)?;
 

@@ -40,4 +40,6 @@ pub enum DataKey {
     Group(BytesN<32>),
     /// Maps a creator address to the identifiers of groups they created.
     CreatorGroups(Address),
+    /// Stores the contract admin address for administrative operations.
+    Admin,
 }
