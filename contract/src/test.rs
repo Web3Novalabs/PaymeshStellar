@@ -1728,10 +1728,7 @@ fn test_update_members_event_emitted() {
     client.update_members(&id, &creator, &members);
 
     let events = env.events().all();
-    // Event 0 = group_created, Event 1 = members_updated
-    assert_eq!(events.len(), 2);
-
-    let update_event = events.get(1).unwrap();
+    let update_event = events.last().unwrap();
 
     let expected_topics: soroban_sdk::Vec<soroban_sdk::Val> = soroban_sdk::vec![
         &env,

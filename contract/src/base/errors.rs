@@ -35,12 +35,8 @@ impl AutoShareError {
     /// Returns a short, actionable description of the error (≤ 100 characters).
     pub fn message(&self) -> &'static str {
         match self {
-            AutoShareError::GroupAlreadyExists => {
-                "Group already exists. Use a unique group ID."
-            }
-            AutoShareError::GroupNotFound => {
-                "Group not found. Verify the group ID is correct."
-            }
+            AutoShareError::GroupAlreadyExists => "Group already exists. Use a unique group ID.",
+            AutoShareError::GroupNotFound => "Group not found. Verify the group ID is correct.",
             AutoShareError::Unauthorized => {
                 "Unauthorized. Only the group creator can perform this action."
             }

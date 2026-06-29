@@ -207,7 +207,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
       id: string;
     }
     const groupRes = await pool.query<GroupRow>(
-      `INSERT INTO groups (creator_id, name, token) VALUES ($1, 'Test Group', 'XLM') RETURNING id`,
+      'INSERT INTO groups (creator_id, name, token) VALUES ($1, \'Test Group\', \'XLM\') RETURNING id',
       [userId]
     );
     const groupId = groupRes.rows[0]?.id as string;
@@ -215,7 +215,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
     await assert.rejects(
       () =>
         pool.query(
-          `INSERT INTO members (group_id, member_address, percentage) VALUES ($1, 'GADDR000', 0)`,
+          'INSERT INTO members (group_id, member_address, percentage) VALUES ($1, \'GADDR000\', 0)',
           [groupId]
         ),
       /check/i,
@@ -248,7 +248,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
       id: string;
     }
     const groupRes = await pool.query<GroupRow>(
-      `INSERT INTO groups (creator_id, name, token) VALUES ($1, 'Tx Group', 'USDC') RETURNING id`,
+      'INSERT INTO groups (creator_id, name, token) VALUES ($1, \'Tx Group\', \'USDC\') RETURNING id',
       [userId]
     );
     const groupId = groupRes.rows[0]?.id as string;
