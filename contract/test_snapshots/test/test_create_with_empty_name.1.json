@@ -15,10 +15,10 @@
               "function_name": "create",
               "args": [
                 {
-                  "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                  "bytes": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
                 },
                 {
-                  "string": "Team F"
+                  "string": ""
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -36,7 +36,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -87,7 +86,7 @@
                 "val": {
                   "vec": [
                     {
-                      "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                      "bytes": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
                     }
                   ]
                 }
@@ -108,7 +107,7 @@
                   "symbol": "Group"
                 },
                 {
-                  "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                  "bytes": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
                 }
               ]
             },
@@ -128,7 +127,7 @@
                       "symbol": "Group"
                     },
                     {
-                      "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                      "bytes": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
                     }
                   ]
                 },
@@ -148,7 +147,7 @@
                         "symbol": "id"
                       },
                       "val": {
-                        "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                        "bytes": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
                       }
                     },
                     {
@@ -164,7 +163,7 @@
                         "symbol": "name"
                       },
                       "val": {
-                        "string": "Team F"
+                        "string": ""
                       }
                     },
                     {

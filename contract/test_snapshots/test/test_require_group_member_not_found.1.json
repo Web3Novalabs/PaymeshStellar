@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 3,
+    "address": 5,
     "nonce": 0
   },
   "auth": [
@@ -15,10 +15,10 @@
               "function_name": "create",
               "args": [
                 {
-                  "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                  "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
                 },
                 {
-                  "string": "Team F"
+                  "string": "AuthTest"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -36,7 +36,60 @@
         }
       ]
     ],
-    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "function_name": "update_members",
+              "args": [
+                {
+                  "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "vec": [
+                    {
+                      "map": [
+                        {
+                          "key": {
+                            "symbol": "address"
+                          },
+                          "val": {
+                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "name"
+                          },
+                          "val": {
+                            "string": "Alice"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "percentage"
+                          },
+                          "val": {
+                            "u32": 10000
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
     []
   ],
   "ledger": {
@@ -87,7 +140,7 @@
                 "val": {
                   "vec": [
                     {
-                      "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                      "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
                     }
                   ]
                 }
@@ -108,7 +161,7 @@
                   "symbol": "Group"
                 },
                 {
-                  "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                  "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
                 }
               ]
             },
@@ -128,7 +181,7 @@
                       "symbol": "Group"
                     },
                     {
-                      "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                      "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
                     }
                   ]
                 },
@@ -148,7 +201,7 @@
                         "symbol": "id"
                       },
                       "val": {
-                        "bytes": "0606060606060606060606060606060606060606060606060606060606060606"
+                        "bytes": "2121212121212121212121212121212121212121212121212121212121212121"
                       }
                     },
                     {
@@ -156,7 +209,36 @@
                         "symbol": "members"
                       },
                       "val": {
-                        "vec": []
+                        "vec": [
+                          {
+                            "map": [
+                              {
+                                "key": {
+                                  "symbol": "address"
+                                },
+                                "val": {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                                }
+                              },
+                              {
+                                "key": {
+                                  "symbol": "name"
+                                },
+                                "val": {
+                                  "string": "Alice"
+                                }
+                              },
+                              {
+                                "key": {
+                                  "symbol": "percentage"
+                                },
+                                "val": {
+                                  "u32": 10000
+                                }
+                              }
+                            ]
+                          }
+                        ]
                       }
                     },
                     {
@@ -164,7 +246,7 @@
                         "symbol": "name"
                       },
                       "val": {
-                        "string": "Team F"
+                        "string": "AuthTest"
                       }
                     },
                     {
@@ -246,6 +328,39 @@
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 801925984706572462
+                  }
+                },
+                "durability": "temporary",
+                "val": "void"
+              }
+            },
+            "ext": "v0"
+          },
+          6311999
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+            "key": {
+              "ledger_key_nonce": {
+                "nonce": 5541220902715666415
+              }
+            },
+            "durability": "temporary"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+                "key": {
+                  "ledger_key_nonce": {
+                    "nonce": 5541220902715666415
                   }
                 },
                 "durability": "temporary",
