@@ -108,9 +108,7 @@ async function indexExists(pool: Pool, indexName: string): Promise<boolean> {
 // Skip when no DB is available.
 // ---------------------------------------------------------------------------
 
-const skipReason: string | false = process.env.DATABASE_URL
-  ? false
-  : 'DATABASE_URL not configured';
+const skipReason: string | false = process.env.DATABASE_URL ? false : 'DATABASE_URL not configured';
 
 // ---------------------------------------------------------------------------
 // Migration smoke tests
@@ -142,10 +140,7 @@ describe('Migration smoke tests', { skip: skipReason }, () => {
     assert.ok(await indexExists(pool, 'idx_members_group_id'), 'idx_members_group_id');
     assert.ok(await indexExists(pool, 'idx_members_member_address'), 'idx_members_member_address');
     assert.ok(await indexExists(pool, 'idx_transactions_group_id'), 'idx_transactions_group_id');
-    assert.ok(
-      await indexExists(pool, 'idx_transactions_timestamp'),
-      'idx_transactions_timestamp'
-    );
+    assert.ok(await indexExists(pool, 'idx_transactions_timestamp'), 'idx_transactions_timestamp');
   });
 
   it('applies DOWN migration — all tables dropped', async () => {
@@ -207,7 +202,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
       id: string;
     }
     const groupRes = await pool.query<GroupRow>(
-      'INSERT INTO groups (creator_id, name, token) VALUES ($1, \'Test Group\', \'XLM\') RETURNING id',
+      "INSERT INTO groups (creator_id, name, token) VALUES ($1, 'Test Group', 'XLM') RETURNING id",
       [userId]
     );
     const groupId = groupRes.rows[0]?.id as string;
@@ -215,7 +210,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
     await assert.rejects(
       () =>
         pool.query(
-          'INSERT INTO members (group_id, member_address, percentage) VALUES ($1, \'GADDR000\', 0)',
+          "INSERT INTO members (group_id, member_address, percentage) VALUES ($1, 'GADDR000', 0)",
           [groupId]
         ),
       /check/i,
@@ -248,7 +243,7 @@ describe('Constraint tests', { skip: skipReason }, () => {
       id: string;
     }
     const groupRes = await pool.query<GroupRow>(
-      'INSERT INTO groups (creator_id, name, token) VALUES ($1, \'Tx Group\', \'USDC\') RETURNING id',
+      "INSERT INTO groups (creator_id, name, token) VALUES ($1, 'Tx Group', 'USDC') RETURNING id",
       [userId]
     );
     const groupId = groupRes.rows[0]?.id as string;
