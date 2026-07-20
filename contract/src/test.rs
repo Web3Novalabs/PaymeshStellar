@@ -106,6 +106,34 @@ fn test_create_group_with_long_name() {
     assert_eq!(details.name, long_name);
 }
 
+// ────── get tests ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_get_found() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[20u8; 32]);
+    let name = String::from_str(&env, "Payroll Team B");
+
+    client.create(&id, &name, &creator, &7, &token);
+    let details = client.get(&id);
+
+    assert_eq!(details.id, id);
+    assert_eq!(details.name, name);
+    assert_eq!(details.creator, creator);
+    assert_eq!(details.usage_count, 7);
+    assert_eq!(details.payment_token, token);
+    assert_eq!(details.members.len(), 0);
+}
+
+#[test]
+fn test_get_not_found() {
+    let (env, client, _creator, _token) = setup_env();
+    let id = BytesN::from_array(&env, &[21u8; 32]);
+
+    let result = client.try_get(&id);
+    assert_eq!(result, Err(Ok(AutoShareError::GroupNotFound)));
+}
+
 // ────── update_members tests ───────────────────────────────────────────────
 
 #[test]
