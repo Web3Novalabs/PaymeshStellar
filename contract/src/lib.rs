@@ -22,6 +22,7 @@ use base::auth::{
 use base::errors::AutoShareError;
 use base::events;
 use base::types::{AutoShareDetails, DataKey, GroupMember};
+use interfaces::autoshare::AutoShareTrait;
 
 mod contract_impl {
     #![allow(missing_docs)]
@@ -33,7 +34,7 @@ mod contract_impl {
     pub struct AutoShareContract;
 
     #[contractimpl]
-    impl AutoShareContract {
+    impl AutoShareTrait for AutoShareContract {
         /// Creates an empty AutoShare group.
         ///
         /// The `creator` must authorize the call. The group is stored under `id`
@@ -55,7 +56,7 @@ mod contract_impl {
         /// # Panics
         ///
         /// Soroban aborts the invocation if `creator` does not authorize the call.
-        pub fn create(
+        fn create(
             env: Env,
             id: BytesN<32>,
             name: String,
@@ -119,7 +120,7 @@ mod contract_impl {
         /// # Panics
         ///
         /// Soroban aborts the invocation if `caller` does not authorize the call.
-        pub fn update_members(
+        fn update_members(
             env: Env,
             id: BytesN<32>,
             caller: Address,
@@ -146,7 +147,7 @@ mod contract_impl {
         /// # Errors
         ///
         /// Returns [`AutoShareError::GroupNotFound`] when `id` is not stored.
-        pub fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError> {
+        fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError> {
             validate_group_exists(&env, &id)
         }
 
@@ -154,7 +155,7 @@ mod contract_impl {
         ///
         /// Missing group records referenced by the creator index are skipped. This
         /// function does not require authentication.
-        pub fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails> {
+        fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails> {
             let key = DataKey::CreatorGroups(creator);
             let ids: Vec<BytesN<32>> = env
                 .storage()
@@ -195,7 +196,7 @@ mod contract_impl {
         /// Soroban aborts if `from` does not authorize the call or if the token
         /// contract rejects a transfer. Internal distribution failures also abort
         /// because stored groups are expected to have been validated on update.
-        pub fn distribute(
+        fn distribute(
             env: Env,
             id: BytesN<32>,
             from: Address,
@@ -239,7 +240,7 @@ mod contract_impl {
         ///
         /// Panics when `group_id` is not stored or its persisted member percentages
         /// are invalid.
-        pub fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
+        fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
             let details: AutoShareDetails = env
                 .storage()
                 .persistent()
@@ -257,7 +258,7 @@ mod contract_impl {
         /// # Panics
         ///
         /// Panics if multiplying `total` by `percentage` overflows `i128`.
-        pub fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
+        fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
             base::utils::calculate_share(total, percentage)
         }
 
@@ -268,7 +269,7 @@ mod contract_impl {
         /// # Panics
         ///
         /// Panics when `group_id` is not stored.
-        pub fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
+        fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
             let details: AutoShareDetails = env
                 .storage()
                 .persistent()
