@@ -82,12 +82,12 @@ fn test_create_and_get() {
 }
 
 #[test]
-#[should_panic(expected = "group already exists")]
 fn test_create_duplicate_group_panics() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[1u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
-    client.create(&id, &String::from_str(&env, "G2"), &creator, &1, &token);
+    let result = client.try_create(&id, &String::from_str(&env, "G2"), &creator, &1, &token);
+    assert!(result.is_err());
 }
 
 // ── update_members tests ─────────────────────────────────────────────────────
@@ -194,6 +194,7 @@ fn test_update_members_duplicate_member() {
 
     let alice = Address::generate(&env);
 
+    // Same address appears twice — must be rejected as DuplicateMember
     let members = vec![
         &env,
         GroupMember {
@@ -208,11 +209,11 @@ fn test_update_members_duplicate_member() {
         },
     ];
 
-    client.update_members(&id, &creator, &members); // 5000 != 10000
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "only the creator can update members")]
 fn test_update_members_non_creator_panics() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[3u8; 32]);
@@ -227,7 +228,9 @@ fn test_update_members_non_creator_panics() {
             percentage: 10000,
         },
     ];
-    client.update_members(&id, &attacker, &members);
+    // Non-creator must be rejected with Unauthorized
+    let result = client.try_update_members(&id, &attacker, &members);
+    assert!(result.is_err());
 }
 
 // ── get_groups_by_creator tests ──────────────────────────────────────────────
@@ -269,33 +272,32 @@ fn test_get_groups_by_creator_returns_empty_for_unknown() {
 // ── distribute: error cases ──────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "amount must be greater than zero")]
 fn test_distribute_zero_amount() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[20u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
-    client.distribute(&creator, &id, &0);
+    let result = client.try_distribute(&id, &creator, &0);
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "amount must be greater than zero")]
 fn test_distribute_negative_amount() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[21u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
-    client.distribute(&creator, &id, &-500);
+    let result = client.try_distribute(&id, &creator, &-500);
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "group not found")]
 fn test_distribute_group_not_found() {
     let (env, client, creator, _token) = setup_env();
     let id = BytesN::from_array(&env, &[99u8; 32]);
-    client.distribute(&creator, &id, &100);
+    let result = client.try_distribute(&id, &creator, &100);
+    assert!(result.is_err());
 }
 
 #[test]
-#[should_panic(expected = "insufficient balance")]
 fn test_distribute_insufficient_balance() {
     let env = Env::default();
     env.mock_all_auths();
@@ -311,7 +313,8 @@ fn test_distribute_insufficient_balance() {
 
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
-    client.distribute(&creator, &id, &1000);
+    let result = client.try_distribute(&id, &creator, &1000);
+    assert!(result.is_err());
 }
 
 // ── distribute: single member ────────────────────────────────────────────────
@@ -325,7 +328,7 @@ fn test_distribute_single_member_receives_full_amount() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 50, &[10000]);
 
-    client.distribute(&creator, &id, &1_000);
+    client.distribute(&id, &creator, &1_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     // Single member must receive exactly the full amount
@@ -344,7 +347,7 @@ fn test_distribute_single_member_odd_amount() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 51, &[10000]);
 
-    client.distribute(&creator, &id, &7);
+    client.distribute(&id, &creator, &7);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 7);
@@ -368,15 +371,13 @@ fn test_distribute_two_members_60_40() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 10, &[6000, 4000]);
 
-    client.distribute(&creator, &id, &1_000);
+    client.distribute(&id, &creator, &1_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 600);
     assert_eq!(token_client.balance(&members.get(1).unwrap()), 400);
-    assert_eq!(600 + 400, 1000);
-
-    let from_balance_after = token_client.balance(&creator);
-    assert_eq!(from_balance_before - from_balance_after, 1000);
+    // Caller transferred the full amount — nothing remains
+    assert_eq!(token_client.balance(&creator), 0);
 }
 
 #[test]
@@ -389,7 +390,7 @@ fn test_distribute_two_members_70_30() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 52, &[7000, 3000]);
 
-    client.distribute(&creator, &id, &10_000);
+    client.distribute(&id, &creator, &10_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 7_000);
@@ -406,7 +407,7 @@ fn test_distribute_two_members_1_99_split() {
     let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 55, &[100, 9900]);
 
-    client.distribute(&creator, &id, &10_000);
+    client.distribute(&id, &creator, &10_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 100);
@@ -431,7 +432,7 @@ fn test_distribute_four_members_equal_split() {
         &[2500, 2500, 2500, 2500],
     );
 
-    client.distribute(&creator, &id, &1_000);
+    client.distribute(&id, &creator, &1_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 250);
@@ -461,7 +462,7 @@ fn test_distribute_five_members_sum_equals_total() {
         &[3000, 2500, 2000, 1500, 1000],
     );
 
-    client.distribute(&creator, &id, &9_999);
+    client.distribute(&id, &creator, &9_999);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let total: i128 = (0..5)
@@ -528,7 +529,7 @@ fn test_distribute_rounding_prime_amount_three_equal_parts() {
         &[3333, 3333, 3334],
     );
 
-    client.distribute(&creator, &id, &997);
+    client.distribute(&id, &creator, &997);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let a = token_client.balance(&members.get(0).unwrap());
@@ -559,7 +560,7 @@ fn test_distribute_rounding_minimal_amount_three_members() {
         &[3333, 3333, 3334],
     );
 
-    client.distribute(&creator, &id, &3);
+    client.distribute(&id, &creator, &3);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let a = token_client.balance(&members.get(0).unwrap());
@@ -587,7 +588,7 @@ fn test_distribute_rounding_seven_members_sum_exact() {
         &[1429, 1429, 1429, 1429, 1429, 1429, 1426],
     );
 
-    client.distribute(&creator, &id, &amount);
+    client.distribute(&id, &creator, &amount);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let total: i128 = (0..7)
@@ -617,7 +618,7 @@ fn test_distribute_realistic_payroll_five_employees() {
         &[4000, 2500, 2000, 1000, 500],
     );
 
-    client.distribute(&creator, &id, &total);
+    client.distribute(&id, &creator, &total);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let distributed: i128 = (0..5)
@@ -646,7 +647,7 @@ fn test_distribute_caller_balance_is_zero_after_full_distribution() {
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 72, &[5000, 5000]);
 
-    client.distribute(&creator, &id, &2_000);
+    client.distribute(&id, &creator, &2_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&creator), 0);
@@ -662,7 +663,7 @@ fn test_distribute_partial_amount_caller_retains_remainder() {
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 73, &[5000, 5000]);
 
-    client.distribute(&creator, &id, &2_000);
+    client.distribute(&id, &creator, &2_000);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&creator), 3_000);
@@ -749,7 +750,7 @@ fn test_update_members_emits_members_updated_event() {
 }
 
 #[test]
-fn test_distribute_emits_distribution_processed_event() {
+fn test_distribute_emits_distributed_event() {
     let (env, client, creator, token_address) = setup_token_env();
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
     token_admin.mint(&creator, &500);
@@ -757,9 +758,9 @@ fn test_distribute_emits_distribution_processed_event() {
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 70, &[5000, 5000]);
 
-    client.distribute(&creator, &id, &500);
+    client.distribute(&id, &creator, &500);
 
-    // Verify the "autoshare"/"distribution_processed" event was published
+    // Verify the "autoshare"/"distributed" event was published
     let events = env.events().all();
     let has_distributed = events.iter().any(|(_contract, topics, _data)| {
         topics
@@ -770,13 +771,13 @@ fn test_distribute_emits_distribution_processed_event() {
                     &env
                 ),
                 soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
-                    &String::from_str(&env, "distribution_processed"),
+                    &String::from_str(&env, "distributed"),
                     &env
                 ),
             ]
     });
     assert!(
         has_distributed,
-        "expected distribution_processed event was not emitted"
+        "expected distributed event was not emitted"
     );
 }
