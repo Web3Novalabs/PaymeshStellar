@@ -74,7 +74,6 @@ fn test_create_and_get() {
     let name = String::from_str(&env, "Payroll Team A");
 
     client.create(&id, &name, &creator, &3, &token);
-
     let details = client.get(&id);
     assert_eq!(details.name, name);
     assert_eq!(details.creator, creator);
@@ -118,7 +117,6 @@ fn test_update_members() {
     ];
 
     client.update_members(&id, &creator, &members);
-
     let details = client.get(&id);
     assert_eq!(details.members.len(), 2);
     assert_eq!(details.members.get(0).unwrap().percentage, 6000);
@@ -126,18 +124,86 @@ fn test_update_members() {
 }
 
 #[test]
-#[should_panic(expected = "percentages must sum to 10000")]
-fn test_update_members_invalid_percentage() {
+fn test_update_members_invalid_percentage_too_low() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[3u8; 32]);
 
     client.create(&id, &String::from_str(&env, "Team C"), &creator, &1, &token);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+    ];
+
+    let result = client.try_update_members(&id, &creator, &members);
+    assert!(result.is_err());
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 0);
+}
+
+#[test]
+fn test_update_members_unauthorized() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[4u8; 32]);
+
+    client.create(&id, &String::from_str(&env, "Team D"), &creator, &1, &token);
+
+    let other_user = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+
+    let result = client.try_update_members(&id, &other_user, &members);
+    assert!(result.is_err());
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 0);
+}
+
+#[test]
+fn test_update_members_group_not_found() {
+    let (env, client, _creator, _token) = setup_env();
+    let id = BytesN::from_array(&env, &[99u8; 32]);
 
     let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
             name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+
+    let result = client.try_update_members(&id, &Address::generate(&env), &members);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_update_members_duplicate_member() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[5u8; 32]);
+
+    client.create(&id, &String::from_str(&env, "Team E"), &creator, &1, &token);
+
+    let alice = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice Again"),
             percentage: 5000,
         },
     ];
@@ -170,8 +236,8 @@ fn test_update_members_non_creator_panics() {
 fn test_get_groups_by_creator() {
     let (env, client, creator, token) = setup_env();
 
-    let id1 = BytesN::from_array(&env, &[4u8; 32]);
-    let id2 = BytesN::from_array(&env, &[5u8; 32]);
+    let id1 = BytesN::from_array(&env, &[8u8; 32]);
+    let id2 = BytesN::from_array(&env, &[9u8; 32]);
 
     client.create(
         &id1,
@@ -307,6 +373,10 @@ fn test_distribute_two_members_60_40() {
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     assert_eq!(token_client.balance(&members.get(0).unwrap()), 600);
     assert_eq!(token_client.balance(&members.get(1).unwrap()), 400);
+    assert_eq!(600 + 400, 1000);
+
+    let from_balance_after = token_client.balance(&creator);
+    assert_eq!(from_balance_before - from_balance_after, 1000);
 }
 
 #[test]
@@ -426,7 +496,7 @@ fn test_distribute_rounding_three_way_33_33_34() {
         &[3300, 3300, 3400],
     );
 
-    client.distribute(&creator, &id, &100);
+    client.distribute(&id, &creator, &100);
 
     let token_client = soroban_sdk::token::Client::new(&env, &token_address);
     let a = token_client.balance(&members.get(0).unwrap());

@@ -5,21 +5,22 @@ on:
     branches:
       - main
       - develop
+      - paymesh-stellar-issue
     paths:
-      - 'contract/**'
-      - '.github/workflows/contract.yml'
+      - "contract/**"
+      - ".github/workflows/contract.yml"
   pull_request:
     branches:
       - main
       - develop
+      - paymesh-stellar-issue
     paths:
-      - 'contract/**'
-      - '.github/workflows/contract.yml'
+      - "contract/**"
+      - ".github/workflows/contract.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -61,11 +62,10 @@ jobs:
 
       - name: Build
         working-directory: contract
-        run: stellar contract build
+        run: cargo build
 
   test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 

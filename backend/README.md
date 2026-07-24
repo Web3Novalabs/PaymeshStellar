@@ -7,14 +7,52 @@ Express.js backend for the PaymeshStellar application.
 ```
 backend/
 ├── src/
-│   └── index.ts          # Main application entry point
-├── dist/                 # Compiled JavaScript (generated)
-├── package.json          # Dependencies and scripts
-├── tsconfig.json         # TypeScript configuration
-├── .eslintrc.json        # ESLint configuration
-├── .prettierrc            # Prettier configuration
-└── .env.example          # Example environment variables
+│   ├── __tests__/        # Smoke tests (health, CORS, headers)
+│   ├── middleware/        # Auth middleware
+│   ├── routes/            # Express route handlers
+│   │   └── __tests__/    # Route integration tests
+│   ├── services/          # Business logic / in-memory stores
+│   ├── types/             # Shared domain types (Group, GroupMember, …)
+│   ├── utils/             # Shared utilities (jwt, stellar, validation)
+│   ├── db/                # Database layer (future)
+│   ├── errors/            # Custom error classes (future)
+│   └── index.ts           # App entry point
+├── dist/                  # Compiled JavaScript (generated)
+├── package.json
+├── tsconfig.json
+├── .eslintrc.json
+├── .prettierrc
+└── .env.example
 ```
+
+## API Endpoints
+
+### `GET /health`
+
+Returns server liveness information.
+
+```json
+{
+  "status": "ok",
+  "uptime": 42,
+  "version": "0.1.0"
+}
+```
+
+- `status` — always `"ok"` when the server is running
+- `uptime` — seconds since the process started
+- `version` — value from `package.json`
+
+### `GET /`
+
+Returns a welcome message confirming the API is reachable.
+
+## Security
+
+- `helmet` sets standard HTTP security headers on every response
+- `cors` restricts `Access-Control-Allow-Origin` to `CORS_ORIGIN` (required in production)
+- Request bodies are limited to `50kb`
+- JWT tokens expire after 24 hours and use timing-safe signature verification
 
 ## Getting Started
 
