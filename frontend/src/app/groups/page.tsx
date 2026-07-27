@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Button from '@/components/Buttons';
+import Button from '@/components/Button';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -211,6 +211,17 @@ export default function GroupsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 lg:px-8">
+      <nav className="mb-6 flex flex-wrap gap-4 text-sm font-medium text-gray-600">
+        <a href="/dashboard" className="transition hover:text-gray-900">
+          Dashboard
+        </a>
+        <a href="/groups" className="text-blue-600 hover:underline">
+          Groups
+        </a>
+        <a href="/settings" className="transition hover:text-gray-900">
+          Settings
+        </a>
+      </nav>
       {/* Page header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
