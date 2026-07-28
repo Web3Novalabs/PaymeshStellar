@@ -1,6 +1,11 @@
 import crypto from 'crypto';
 
-const TOKEN_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+
+function getTokenTtlSeconds(): number {
+  const fromEnv = Number(process.env.JWT_TTL_SECONDS);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_TOKEN_TTL_SECONDS;
+}
 
 function getSecret(): string {
   return process.env.JWT_SECRET || 'fallback-secret-for-testing-only-32-chars-long';
@@ -25,7 +30,7 @@ export function signToken(payload: Record<string, unknown>): string {
   const data = base64UrlEncode(
     JSON.stringify({
       iat: now,
-      exp: now + TOKEN_TTL_SECONDS,
+      exp: now + getTokenTtlSeconds(),
       ...payload,
     })
   );

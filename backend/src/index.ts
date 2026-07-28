@@ -8,6 +8,7 @@ import { asyncHandler } from './middleware/asyncHandler.js';
 import { requestLogger } from './middleware/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import usersRouter from './routes/users.js';
+import authRouter from './routes/auth.js';
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ if (process.env.NODE_ENV === 'test') {
   );
 }
 
+app.use('/auth', authRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/users', usersRouter);
