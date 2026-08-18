@@ -29,6 +29,14 @@ pub enum AutoShareError {
     // Explicit variants requested by issue #54
     UnauthorizedAccess = 10,
     InvalidGroupId = 11,
+    /// The contract schema is outdated; call `migrate` before mutating state.
+    MigrationRequired = 12,
+    /// `migrate` was called but the schema is already at the current version.
+    NothingToMigrate = 13,
+    /// `upgrade` was called while the contract is not paused.
+    ContractNotPaused = 14,
+    /// The contract has already been initialized.
+    AlreadyInitialized = 15,
 }
 
 impl AutoShareError {
@@ -63,6 +71,18 @@ impl AutoShareError {
             }
             AutoShareError::InvalidGroupId => {
                 "Invalid group ID. The provided group ID does not exist or is malformed."
+            }
+            AutoShareError::MigrationRequired => {
+                "Migration required. Call migrate() before performing mutations."
+            }
+            AutoShareError::NothingToMigrate => {
+                "Nothing to migrate. The contract schema is already current."
+            }
+            AutoShareError::ContractNotPaused => {
+                "Contract not paused. Pause the contract before upgrading."
+            }
+            AutoShareError::AlreadyInitialized => {
+                "Already initialized. The contract has already been set up."
             }
         }
     }

@@ -13,6 +13,8 @@ fn setup_env() -> (Env, AutoShareContractClient<'static>, Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
     let creator = Address::generate(&env);
     let token = Address::generate(&env);
     (env, client, creator, token)
@@ -26,6 +28,8 @@ fn setup_token_env() -> (Env, AutoShareContractClient<'static>, Address, Address
     let token_address = token_id.address();
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
     let creator = Address::generate(&env);
     (env, client, creator, token_address)
 }
@@ -299,13 +303,7 @@ fn test_distribute_group_not_found() {
 
 #[test]
 fn test_distribute_insufficient_balance() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let token_address = token_id.address();
-    let contract_id = env.register(AutoShareContract, ());
-    let client = AutoShareContractClient::new(&env, &contract_id);
-    let creator = Address::generate(&env);
+    let (env, client, creator, token_address) = setup_token_env();
 
     // Mint only 50, but try to distribute 1000
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
@@ -357,14 +355,7 @@ fn test_distribute_single_member_odd_amount() {
 
 #[test]
 fn test_distribute_two_members_60_40() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let token_address = token_id.address();
-    let contract_id = env.register(AutoShareContract, ());
-    let client = AutoShareContractClient::new(&env, &contract_id);
-    let creator = Address::generate(&env);
+    let (env, client, creator, token_address) = setup_token_env();
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
     token_admin.mint(&creator, &1_000);
 
@@ -476,14 +467,7 @@ fn test_distribute_five_members_sum_equals_total() {
 
 #[test]
 fn test_distribute_rounding_three_way_33_33_34() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
-    let token_address = token_id.address();
-    let contract_id = env.register(AutoShareContract, ());
-    let client = AutoShareContractClient::new(&env, &contract_id);
-    let creator = Address::generate(&env);
+    let (env, client, creator, token_address) = setup_token_env();
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
     token_admin.mint(&creator, &100);
 
@@ -780,4 +764,390 @@ fn test_distribute_emits_distributed_event() {
         has_distributed,
         "expected distributed event was not emitted"
     );
+}
+
+// ── upgrade & migration tests ────────────────────────────────────────────────
+
+#[test]
+fn test_init_stamps_schema_version_and_sets_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    assert_eq!(client.schema_version(), 0);
+    client.init(&admin);
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+
+    // Repeated init must fail
+    let admin2 = Address::generate(&env);
+    let err = client.try_init(&admin2);
+    assert_eq!(err, Err(Ok(AutoShareError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_full_upgrade_lifecycle() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Seed v1 layout in storage directly (simulating a deployed v1 contract with pre-existing data)
+    let id1 = BytesN::from_array(&env, &[101u8; 32]);
+    let id2 = BytesN::from_array(&env, &[102u8; 32]);
+    let member_addr = Address::generate(&env);
+
+    let mut members1 = Vec::new(&env);
+    members1.push_back(GroupMember {
+        address: member_addr.clone(),
+        name: String::from_str(&env, "Alice"),
+        percentage: 10000,
+    });
+
+    let v1_group1 = AutoShareDetailsV1 {
+        id: id1.clone(),
+        name: String::from_str(&env, "V1 Alpha"),
+        creator: creator.clone(),
+        usage_count: 5,
+        payment_token: token.clone(),
+        members: members1.clone(),
+    };
+
+    let v1_group2 = AutoShareDetailsV1 {
+        id: id2.clone(),
+        name: String::from_str(&env, "V1 Beta"),
+        creator: creator.clone(),
+        usage_count: 10,
+        payment_token: token.clone(),
+        members: Vec::new(&env),
+    };
+
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Group(id1.clone()), &v1_group1);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Group(id2.clone()), &v1_group2);
+
+        let mut creator_groups = Vec::new(&env);
+        creator_groups.push_back(id1.clone());
+        creator_groups.push_back(id2.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::CreatorGroups(creator.clone()), &creator_groups);
+
+        let mut all_groups = Vec::new(&env);
+        all_groups.push_back(id1.clone());
+        all_groups.push_back(id2.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_groups);
+    });
+
+    assert_eq!(client.schema_version(), 1);
+
+    // 1. Assert mutating calls fail with MigrationRequired while schema_version != CURRENT_SCHEMA_VERSION
+    let new_id = BytesN::from_array(&env, &[103u8; 32]);
+    let err_create = client.try_create(
+        &new_id,
+        &String::from_str(&env, "New Group"),
+        &creator,
+        &1,
+        &token,
+    );
+    assert_eq!(err_create, Err(Ok(AutoShareError::MigrationRequired)));
+
+    let err_update = client.try_update_members(&id1, &creator, &members1);
+    assert_eq!(err_update, Err(Ok(AutoShareError::MigrationRequired)));
+
+    let err_distribute = client.try_distribute(&id1, &creator, &100);
+    assert_eq!(err_distribute, Err(Ok(AutoShareError::MigrationRequired)));
+
+    // 2. Assert read operations remain available and correctly return v1 group data
+    let group1 = client.get(&id1);
+    assert_eq!(group1.id, id1);
+    assert_eq!(group1.name, String::from_str(&env, "V1 Alpha"));
+    assert_eq!(group1.creator, creator);
+    assert_eq!(group1.usage_count, 5);
+    assert_eq!(group1.version, 1);
+    assert_eq!(group1.members.len(), 1);
+
+    let creator_groups = client.get_groups_by_creator(&creator);
+    assert_eq!(creator_groups.len(), 2);
+
+    let shares = client.get_member_shares(&id1, &1000);
+    assert_eq!(shares.get(0).unwrap(), 1000);
+
+    // 3. Pause and run migration
+    client.pause(&admin);
+    let progress = client.migrate(&admin, &10);
+    assert_eq!(progress.migrated, 2);
+    assert_eq!(progress.remaining, 0);
+    assert!(progress.done);
+
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+    client.unpause(&admin);
+
+    // 4. Assert mutations now succeed
+    let res_create = client.try_create(
+        &new_id,
+        &String::from_str(&env, "New Group"),
+        &creator,
+        &1,
+        &token,
+    );
+    assert!(res_create.is_ok());
+
+    // 5. Assert every group's data survived field-for-field with upgraded schema version
+    let upgraded_g1 = client.get(&id1);
+    assert_eq!(upgraded_g1.id, v1_group1.id);
+    assert_eq!(upgraded_g1.name, v1_group1.name);
+    assert_eq!(upgraded_g1.creator, v1_group1.creator);
+    assert_eq!(upgraded_g1.usage_count, v1_group1.usage_count);
+    assert_eq!(upgraded_g1.payment_token, v1_group1.payment_token);
+    assert_eq!(upgraded_g1.members, v1_group1.members);
+    assert_eq!(upgraded_g1.version, CURRENT_SCHEMA_VERSION);
+
+    let upgraded_g2 = client.get(&id2);
+    assert_eq!(upgraded_g2.id, v1_group2.id);
+    assert_eq!(upgraded_g2.name, v1_group2.name);
+    assert_eq!(upgraded_g2.creator, v1_group2.creator);
+    assert_eq!(upgraded_g2.usage_count, v1_group2.usage_count);
+    assert_eq!(upgraded_g2.payment_token, v1_group2.payment_token);
+    assert_eq!(upgraded_g2.members, v1_group2.members);
+    assert_eq!(upgraded_g2.version, CURRENT_SCHEMA_VERSION);
+}
+
+#[test]
+fn test_batch_resumption_7_groups_limit_3() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Setup 7 groups in V1 layout
+    let mut all_ids = Vec::new(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        for i in 1..=7u8 {
+            let id = BytesN::from_array(&env, &[i; 32]);
+            all_ids.push_back(id.clone());
+
+            let v1 = AutoShareDetailsV1 {
+                id: id.clone(),
+                name: String::from_str(&env, "Group"),
+                creator: creator.clone(),
+                usage_count: i as u32,
+                payment_token: token.clone(),
+                members: Vec::new(&env),
+            };
+            env.storage().persistent().set(&DataKey::Group(id), &v1);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_ids);
+    });
+
+    // Call 1: limit 3 -> migrates 3, 4 remaining
+    let p1 = client.migrate(&admin, &3);
+    assert_eq!(p1.migrated, 3);
+    assert_eq!(p1.remaining, 4);
+    assert!(!p1.done);
+    assert_eq!(client.schema_version(), 1);
+
+    // Call 2: limit 3 -> migrates 3, 1 remaining
+    let p2 = client.migrate(&admin, &3);
+    assert_eq!(p2.migrated, 3);
+    assert_eq!(p2.remaining, 1);
+    assert!(!p2.done);
+    assert_eq!(client.schema_version(), 1);
+
+    // Call 3: limit 3 -> migrates 1, 0 remaining, done!
+    let p3 = client.migrate(&admin, &3);
+    assert_eq!(p3.migrated, 1);
+    assert_eq!(p3.remaining, 0);
+    assert!(p3.done);
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+
+    // Exactly 3 calls completed migration. 4th call returns NothingToMigrate.
+    let err = client.try_migrate(&admin, &3);
+    assert_eq!(err, Err(Ok(AutoShareError::NothingToMigrate)));
+
+    // Verify all 7 groups are migrated to CURRENT_SCHEMA_VERSION
+    for i in 1..=7u8 {
+        let id = BytesN::from_array(&env, &[i; 32]);
+        let g = client.get(&id);
+        assert_eq!(g.version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(g.usage_count, i as u32);
+    }
+}
+
+#[test]
+fn test_interrupted_migration_consistent_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    let mut all_ids = Vec::new(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        for i in 1..=5u8 {
+            let id = BytesN::from_array(&env, &[i; 32]);
+            all_ids.push_back(id.clone());
+
+            let v1 = AutoShareDetailsV1 {
+                id: id.clone(),
+                name: String::from_str(&env, "Group"),
+                creator: creator.clone(),
+                usage_count: i as u32,
+                payment_token: token.clone(),
+                members: Vec::new(&env),
+            };
+            env.storage().persistent().set(&DataKey::Group(id), &v1);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_ids);
+    });
+
+    // Run batch 1 (2 groups) and interrupt (don't call migrate again)
+    let p1 = client.migrate(&admin, &2);
+    assert_eq!(p1.migrated, 2);
+    assert_eq!(p1.remaining, 3);
+    assert!(!p1.done);
+
+    // Verify readable state for all 5 groups
+    for i in 1..=5u8 {
+        let id = BytesN::from_array(&env, &[i; 32]);
+        let g = client.get(&id);
+        assert_eq!(g.usage_count, i as u32);
+        if i <= 2 {
+            assert_eq!(g.version, CURRENT_SCHEMA_VERSION);
+        } else {
+            assert_eq!(g.version, 1);
+        }
+    }
+}
+
+#[test]
+fn test_non_admin_upgrade_unauthorized() {
+    let (env, client, _creator, _token) = setup_env();
+    let stranger = Address::generate(&env);
+    let fake_wasm_hash = BytesN::from_array(&env, &[99u8; 32]);
+
+    let err = client.try_upgrade(&stranger, &fake_wasm_hash);
+    assert_eq!(err, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_non_admin_migrate_unauthorized() {
+    let (env, client, _creator, _token) = setup_env();
+    let stranger = Address::generate(&env);
+
+    let err = client.try_migrate(&stranger, &5);
+    assert_eq!(err, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_upgrade_while_unpaused_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
+
+    let fake_wasm_hash = BytesN::from_array(&env, &[88u8; 32]);
+
+    // Contract is not paused -> upgrade returns ContractNotPaused
+    let err = client.try_upgrade(&admin, &fake_wasm_hash);
+    assert_eq!(err, Err(Ok(AutoShareError::ContractNotPaused)));
+
+    // Pause contract -> upgrade proceeds past the pause check
+    client.pause(&admin);
+    // Note: upgrade with a non-existent wasm hash in test env will fail at deployer level or succeed if mock
+    let res = client.try_upgrade(&admin, &fake_wasm_hash);
+    // In soroban testutils with mock_all_auths, deployer update will succeed or throw host error for invalid wasm,
+    // but the contract level validation (auth and pause) succeeded.
+    assert_ne!(res, Err(Ok(AutoShareError::ContractNotPaused)));
+    assert_ne!(res, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_migrate_when_current_returns_nothing_to_migrate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
+
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+    let err = client.try_migrate(&admin, &10);
+    assert_eq!(err, Err(Ok(AutoShareError::NothingToMigrate)));
+}
+
+#[test]
+fn test_pause_unpause_admin_only() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    client.init(&admin);
+
+    // Non-admin cannot pause or unpause
+    assert_eq!(
+        client.try_pause(&stranger),
+        Err(Ok(AutoShareError::Unauthorized))
+    );
+    assert_eq!(
+        client.try_unpause(&stranger),
+        Err(Ok(AutoShareError::Unauthorized))
+    );
+
+    // Admin can pause and unpause
+    assert!(client.try_pause(&admin).is_ok());
+    assert!(client.try_unpause(&admin).is_ok());
+}
+
+#[test]
+fn test_all_groups_global_index_maintained_on_create() {
+    let (env, client, creator, token) = setup_env();
+
+    let id1 = BytesN::from_array(&env, &[111u8; 32]);
+    let id2 = BytesN::from_array(&env, &[112u8; 32]);
+
+    client.create(&id1, &String::from_str(&env, "G1"), &creator, &1, &token);
+    client.create(&id2, &String::from_str(&env, "G2"), &creator, &2, &token);
+
+    let g1 = client.get(&id1);
+    assert_eq!(g1.version, CURRENT_SCHEMA_VERSION);
+    let g2 = client.get(&id2);
+    assert_eq!(g2.version, CURRENT_SCHEMA_VERSION);
 }

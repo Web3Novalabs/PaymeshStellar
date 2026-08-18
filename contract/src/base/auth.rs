@@ -1,7 +1,7 @@
 //! Authorization and validation helpers used by contract entrypoints.
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, DataKey, GroupMember};
+use crate::base::types::{AutoShareDetails, AutoShareDetailsV1, DataKey, GroupMember};
 use soroban_sdk::{Address, BytesN, Env};
 
 /// Validates that a distribution amount is greater than zero.
@@ -38,7 +38,7 @@ pub fn validate_percentages(members: &soroban_sdk::Vec<GroupMember>) -> Result<(
     }
 }
 
-/// Loads an existing group from persistent storage.
+/// Loads an existing group from persistent storage, supporting both v2 and v1 formats.
 ///
 /// # Errors
 ///
@@ -47,10 +47,31 @@ pub fn validate_group_exists(
     env: &Env,
     id: &BytesN<32>,
 ) -> Result<AutoShareDetails, AutoShareError> {
-    env.storage()
-        .persistent()
-        .get(&DataKey::Group(id.clone()))
-        .ok_or(AutoShareError::GroupNotFound)
+    use soroban_sdk::{Map, TryFromVal, Val};
+
+    let key = DataKey::Group(id.clone());
+    if let Some(val) = env.storage().persistent().get::<DataKey, Val>(&key) {
+        if let Ok(map) = Map::<Val, Val>::try_from_val(env, &val) {
+            if map.len() == 6 {
+                if let Ok(v1) = AutoShareDetailsV1::try_from_val(env, &val) {
+                    return Ok(AutoShareDetails {
+                        id: v1.id,
+                        name: v1.name,
+                        creator: v1.creator,
+                        usage_count: v1.usage_count,
+                        payment_token: v1.payment_token,
+                        members: v1.members,
+                        version: 1,
+                    });
+                }
+            } else if map.len() == 7 {
+                if let Ok(details) = AutoShareDetails::try_from_val(env, &val) {
+                    return Ok(details);
+                }
+            }
+        }
+    }
+    Err(AutoShareError::GroupNotFound)
 }
 
 /// Finds a member by address.
@@ -146,21 +167,21 @@ pub fn require_group_member(
 
 /// Requires that `caller` is the contract admin.
 ///
-/// The admin address is stored under [`DataKey::Admin`]. This helper is
-/// intended for contract-level administrative operations introduced in #68.
+/// The admin address is stored under [`DataKey::Admin`].
 ///
 /// # Errors
 ///
-/// Returns [`AutoShareError::GroupNotFound`] when no admin has been set, or
-/// [`AutoShareError::Unauthorized`] when `caller` is not the admin.
+/// Returns [`AutoShareError::Unauthorized`] when no admin has been set or
+/// when `caller` is not the admin.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> {
     caller.require_auth();
 
     let admin: Address = env
         .storage()
-        .persistent()
+        .instance()
         .get(&DataKey::Admin)
-        .ok_or(AutoShareError::GroupNotFound)?;
+        .or_else(|| env.storage().persistent().get(&DataKey::Admin))
+        .ok_or(AutoShareError::Unauthorized)?;
 
     if admin == *caller {
         Ok(())
@@ -174,4 +195,46 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> 
 /// Returns `true` if `address` appears in `details.members`, `false` otherwise.
 pub fn is_member(details: &AutoShareDetails, address: &Address) -> bool {
     details.members.iter().any(|m| m.address == *address)
+}
+
+/// Checks that the on-chain schema version matches [`crate::base::types::CURRENT_SCHEMA_VERSION`].
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::MigrationRequired`] when the stored version is
+/// absent or does not equal the compiled constant.
+pub fn require_migration_current(env: &Env) -> Result<(), AutoShareError> {
+    use crate::base::types::CURRENT_SCHEMA_VERSION;
+
+    let stored: u32 = env
+        .storage()
+        .instance()
+        .get(&DataKey::SchemaVersion)
+        .unwrap_or(0);
+
+    if stored == CURRENT_SCHEMA_VERSION {
+        Ok(())
+    } else {
+        Err(AutoShareError::MigrationRequired)
+    }
+}
+
+/// Checks that the contract is currently paused.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::ContractNotPaused`] when the contract is not
+/// paused or the `Paused` flag has never been set.
+pub fn require_paused(env: &Env) -> Result<(), AutoShareError> {
+    let paused: bool = env
+        .storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false);
+
+    if paused {
+        Ok(())
+    } else {
+        Err(AutoShareError::ContractNotPaused)
+    }
 }

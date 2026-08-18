@@ -16,12 +16,15 @@ pub mod interfaces;
 mod test;
 
 use base::auth::{
-    require_group_creator, validate_amount, validate_group_exists, validate_members_unique,
-    validate_percentages,
+    require_admin, require_group_creator, require_migration_current, require_paused,
+    validate_amount, validate_group_exists, validate_members_unique, validate_percentages,
 };
 use base::errors::AutoShareError;
 use base::events;
-use base::types::{AutoShareDetails, DataKey, GroupMember};
+use base::types::{
+    AutoShareDetails, AutoShareDetailsV1, DataKey, GroupMember, MigrationProgress,
+    CURRENT_SCHEMA_VERSION,
+};
 use interfaces::autoshare::AutoShareTrait;
 
 mod contract_impl {
@@ -35,10 +38,34 @@ mod contract_impl {
 
     #[contractimpl]
     impl AutoShareTrait for AutoShareContract {
+        /// Initializes the contract with an admin and stamps the initial schema version.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `admin`: Address granted administrator privileges.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::AlreadyInitialized`] if already initialized.
+        fn init(env: Env, admin: Address) -> Result<(), AutoShareError> {
+            if env.storage().instance().has(&DataKey::Admin) {
+                return Err(AutoShareError::AlreadyInitialized);
+            }
+
+            env.storage().instance().set(&DataKey::Admin, &admin);
+            env.storage()
+                .instance()
+                .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+            env.storage().instance().set(&DataKey::Paused, &false);
+
+            Ok(())
+        }
+
         /// Creates an empty AutoShare group.
         ///
-        /// The `creator` must authorize the call. The group is stored under `id`
-        /// and indexed under the creator's address.
+        /// The `creator` must authorize the call. The group is stored under `id`,
+        /// indexed under the creator's address, and added to the global group index.
         ///
         /// # Parameters
         ///
@@ -51,7 +78,8 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::GroupAlreadyExists`] when `id` is already stored.
+        /// Returns [`AutoShareError::MigrationRequired`] when an upgrade migration is pending,
+        /// or [`AutoShareError::GroupAlreadyExists`] when `id` is already stored.
         ///
         /// # Panics
         ///
@@ -64,6 +92,7 @@ mod contract_impl {
             usage_count: u32,
             payment_token: Address,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
             creator.require_auth();
 
             if env.storage().persistent().has(&DataKey::Group(id.clone())) {
@@ -77,6 +106,7 @@ mod contract_impl {
                 usage_count,
                 payment_token,
                 members: Vec::new(&env),
+                version: CURRENT_SCHEMA_VERSION,
             };
 
             env.storage()
@@ -91,6 +121,16 @@ mod contract_impl {
                 .unwrap_or(Vec::new(&env));
             ids.push_back(id.clone());
             env.storage().persistent().set(&key, &ids);
+
+            // Maintain global group index for enumeration and migrations
+            let all_groups_key = DataKey::AllGroups;
+            let mut all_ids: Vec<BytesN<32>> = env
+                .storage()
+                .persistent()
+                .get(&all_groups_key)
+                .unwrap_or(Vec::new(&env));
+            all_ids.push_back(id.clone());
+            env.storage().persistent().set(&all_groups_key, &all_ids);
 
             events::group_created(&env, &id, &creator);
             Ok(())
@@ -111,11 +151,10 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::GroupNotFound`],
+        /// Returns [`AutoShareError::MigrationRequired`], [`AutoShareError::GroupNotFound`],
         /// [`AutoShareError::Unauthorized`], [`AutoShareError::EmptyMembers`],
         /// [`AutoShareError::DuplicateMember`], or
-        /// [`AutoShareError::InvalidPercentage`] when the corresponding validation
-        /// fails.
+        /// [`AutoShareError::InvalidPercentage`] when validation fails.
         ///
         /// # Panics
         ///
@@ -126,6 +165,8 @@ mod contract_impl {
             caller: Address,
             new_members: Vec<GroupMember>,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
+
             let mut details = validate_group_exists(&env, &id)?;
 
             require_group_creator(&env, &details, &caller)?;
@@ -134,6 +175,7 @@ mod contract_impl {
 
             let count = new_members.len();
             details.members = new_members;
+            details.version = CURRENT_SCHEMA_VERSION;
             env.storage()
                 .persistent()
                 .set(&DataKey::Group(id.clone()), &details);
@@ -165,7 +207,7 @@ mod contract_impl {
 
             let mut result: Vec<AutoShareDetails> = Vec::new(&env);
             for id in ids.iter() {
-                if let Some(details) = env.storage().persistent().get(&DataKey::Group(id)) {
+                if let Ok(details) = validate_group_exists(&env, &id) {
                     result.push_back(details);
                 }
             }
@@ -187,7 +229,7 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::InvalidAmount`],
+        /// Returns [`AutoShareError::MigrationRequired`], [`AutoShareError::InvalidAmount`],
         /// [`AutoShareError::GroupNotFound`], [`AutoShareError::EmptyMembers`], or
         /// [`AutoShareError::InsufficientBalance`] when validation fails.
         ///
@@ -202,6 +244,7 @@ mod contract_impl {
             from: Address,
             amount: i128,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
             from.require_auth();
 
             validate_amount(amount)?;
@@ -245,11 +288,7 @@ mod contract_impl {
         /// Panics when `group_id` is not stored or its persisted member percentages
         /// are invalid.
         fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
-            let details: AutoShareDetails = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Group(group_id))
-                .expect("group not found");
+            let details = validate_group_exists(&env, &group_id).expect("group not found");
 
             base::utils::distribute_amounts(&env, total_amount, &details.members)
                 .expect("invalid group configuration")
@@ -274,17 +313,192 @@ mod contract_impl {
         ///
         /// Panics when `group_id` is not stored.
         fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
-            let details: AutoShareDetails = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Group(group_id))
-                .expect("group not found");
+            let details = validate_group_exists(&env, &group_id).expect("group not found");
 
             let mut sum: u32 = 0;
             for member in details.members.iter() {
                 sum = sum.saturating_add(member.percentage);
             }
             sum
+        }
+
+        /// Upgrades the contract WASM executable to a new hash.
+        ///
+        /// The caller must be the contract admin, and the contract must be paused.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the upgrade.
+        /// - `new_wasm_hash`: 32-byte hash of the newly installed WASM.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::ContractNotPaused`] if the contract is active.
+        fn upgrade(
+            env: Env,
+            caller: Address,
+            new_wasm_hash: BytesN<32>,
+        ) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            require_paused(&env)?;
+
+            env.deployer()
+                .update_current_contract_wasm(new_wasm_hash.clone());
+            events::upgraded(&env, &new_wasm_hash);
+            Ok(())
+        }
+
+        /// Performs batched migration of stored groups to [`CURRENT_SCHEMA_VERSION`].
+        ///
+        /// The caller must be the contract admin. Processes up to `limit` groups
+        /// per call using a persisted cursor.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the migration.
+        /// - `limit`: Maximum number of groups to migrate in this transaction.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::NothingToMigrate`] if already at the current schema version.
+        fn migrate(
+            env: Env,
+            caller: Address,
+            limit: u32,
+        ) -> Result<MigrationProgress, AutoShareError> {
+            require_admin(&env, &caller)?;
+
+            let current_schema: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0);
+
+            if current_schema == CURRENT_SCHEMA_VERSION {
+                return Err(AutoShareError::NothingToMigrate);
+            }
+
+            let all_ids: Vec<BytesN<32>> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::AllGroups)
+                .unwrap_or(Vec::new(&env));
+
+            let total_groups = all_ids.len();
+            let cursor: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::MigrationCursor)
+                .unwrap_or(0);
+
+            if total_groups == 0 || cursor >= total_groups {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+                events::migrated(&env, 0, 0);
+                return Ok(MigrationProgress {
+                    migrated: 0,
+                    remaining: 0,
+                    done: true,
+                });
+            }
+
+            let end = (cursor + limit).min(total_groups);
+            let mut count: u32 = 0;
+
+            use soroban_sdk::{Map, TryFromVal, Val};
+
+            for i in cursor..end {
+                let id = all_ids.get(i).unwrap();
+                let key = DataKey::Group(id.clone());
+
+                if let Some(val) = env.storage().persistent().get::<DataKey, Val>(&key) {
+                    if let Ok(map) = Map::<Val, Val>::try_from_val(&env, &val) {
+                        if map.len() == 6 {
+                            if let Ok(v1) = AutoShareDetailsV1::try_from_val(&env, &val) {
+                                let v2 = AutoShareDetails {
+                                    id: v1.id,
+                                    name: v1.name,
+                                    creator: v1.creator,
+                                    usage_count: v1.usage_count,
+                                    payment_token: v1.payment_token,
+                                    members: v1.members,
+                                    version: CURRENT_SCHEMA_VERSION,
+                                };
+                                env.storage().persistent().set(&key, &v2);
+                            }
+                        } else if map.len() == 7 {
+                            if let Ok(mut v2) = AutoShareDetails::try_from_val(&env, &val) {
+                                if v2.version != CURRENT_SCHEMA_VERSION {
+                                    v2.version = CURRENT_SCHEMA_VERSION;
+                                    env.storage().persistent().set(&key, &v2);
+                                }
+                            }
+                        }
+                    }
+                }
+                count += 1;
+            }
+
+            let new_cursor = end;
+            let remaining = total_groups - new_cursor;
+            let done = remaining == 0;
+
+            if done {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+            } else {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::MigrationCursor, &new_cursor);
+            }
+
+            events::migrated(&env, count, remaining);
+
+            Ok(MigrationProgress {
+                migrated: count,
+                remaining,
+                done,
+            })
+        }
+
+        /// Returns the current schema version stamped in contract instance storage.
+        fn schema_version(env: Env) -> u32 {
+            env.storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0)
+        }
+
+        /// Pauses the contract, allowing administrative maintenance and upgrades.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn pause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &true);
+            events::paused(&env);
+            Ok(())
+        }
+
+        /// Unpauses the contract, resuming normal operation.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &false);
+            events::unpaused(&env);
+            Ok(())
         }
     }
 }
