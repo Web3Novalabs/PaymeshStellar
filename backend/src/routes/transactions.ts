@@ -6,7 +6,7 @@ import { groupsService } from '../services/groups.js';
 const router: Router = Router();
 
 // Stellar address validation regex (G... format, 56 characters, Base32 alphabet)
-const STELLAR_ADDRESS_REGEX = /^G[A-D2-7][A-Z2-7]{54}$/;
+const STELLAR_ADDRESS_REGEX = /^G[A-D][A-Z2-7]{54}$/;
 
 function isValidStellarAddress(address: string): boolean {
   return STELLAR_ADDRESS_REGEX.test(address);

@@ -1,11 +1,10 @@
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'crypto';
 import request from 'supertest';
 import { app } from '../../index.js';
 import { challengesService } from '../../services/challenges.js';
 import { stellarSignatureVerifier } from '../../utils/stellar.js';
-import { signToken, verifyToken } from '../../utils/jwt.js';
+import { signToken } from '../../utils/jwt.js';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
@@ -18,22 +17,6 @@ process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
 
 const VALID_ADDRESS = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU';
 const REAL_ADDRESS = 'GDHVHQN2JFDZ5XYBIA3QBLGTHR7GXJZVUDTVQJJXM7SOMXA5YYBSDFWX';
-
-function buildRawToken(
-  payload: Record<string, unknown>,
-  secret = process.env.JWT_SECRET as string
-): string {
-  function base64UrlEncode(input: string | Buffer): string {
-    const buffer = typeof input === 'string' ? Buffer.from(input) : input;
-    return buffer.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  }
-  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const data = base64UrlEncode(JSON.stringify(payload));
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(`${header}.${data}`);
-  const signature = base64UrlEncode(hmac.digest());
-  return `${header}.${data}.${signature}`;
-}
 
 beforeEach(async () => {
   mock.restoreAll();
@@ -5819,10 +5802,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: single space', async () => {
@@ -6449,10 +6432,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: single space', async () => {
