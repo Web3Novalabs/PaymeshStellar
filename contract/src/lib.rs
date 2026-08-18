@@ -3,6 +3,8 @@ use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String, V
 
 pub mod base;
 pub mod interfaces;
+#[cfg(test)]
+mod prop_tests;
 mod test;
 
 use base::errors::AutoShareError;
@@ -126,8 +128,7 @@ impl AutoShareContract {
             return Err(AutoShareError::InsufficientBalance);
         }
 
-        let shares = base::utils::distribute_amounts(&env, amount, &details.members)
-            .expect("failed to distribute amounts");
+        let shares = base::utils::distribute_amounts(&env, amount, &details.members)?;
 
         for (i, member) in details.members.iter().enumerate() {
             let share = shares.get(i as u32).unwrap();
@@ -141,36 +142,51 @@ impl AutoShareContract {
     /// Returns the computed share each member would receive for `total_amount`,
     /// using the same floor-division + last-member-dust logic as `distribute`.
     /// This is a pure read: no tokens are moved.
-    pub fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
-        let details: AutoShareDetails = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Group(group_id))
-            .expect("group not found");
-
+    ///
+    /// # Errors
+    ///
+    /// - [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
+    /// - [`AutoShareError::InvalidAmount`] if `total_amount` is negative or would
+    ///   cause an arithmetic overflow.
+    /// - [`AutoShareError::InvalidPercentage`] if the stored member configuration
+    ///   is invalid (should not occur for a well-formed group).
+    pub fn get_member_shares(
+        env: Env,
+        group_id: BytesN<32>,
+        total_amount: i128,
+    ) -> Result<Vec<i128>, AutoShareError> {
+        let details = validate_group_exists(&env, &group_id)?;
         base::utils::distribute_amounts(&env, total_amount, &details.members)
-            .expect("invalid group configuration")
     }
 
     /// Returns `total * percentage / 10_000` for any arbitrary inputs.
-    /// Useful for ad-hoc share preview before calling distribute.
-    pub fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
+    /// Useful for ad-hoc share preview before calling `distribute`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AutoShareError::InvalidAmount`] if the intermediate product
+    /// `total * percentage` would overflow `i128`.
+    pub fn get_calculated_share(
+        _env: Env,
+        total: i128,
+        percentage: u32,
+    ) -> Result<i128, AutoShareError> {
         base::utils::calculate_share(total, percentage)
     }
 
     /// Returns the sum of all member percentages (in basis points) for a group.
-    /// A healthy group should always return 10000.
-    pub fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
-        let details: AutoShareDetails = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Group(group_id))
-            .expect("group not found");
+    /// A healthy group should always return 10 000.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
+    pub fn get_total_percentage(env: Env, group_id: BytesN<32>) -> Result<u32, AutoShareError> {
+        let details = validate_group_exists(&env, &group_id)?;
 
         let mut sum: u32 = 0;
         for member in details.members.iter() {
             sum = sum.saturating_add(member.percentage);
         }
-        sum
+        Ok(sum)
     }
 }

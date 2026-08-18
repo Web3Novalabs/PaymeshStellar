@@ -34,11 +34,33 @@ pub trait AutoShareTrait {
     /// Pure view: returns the share amounts each member of a group would receive
     /// for `total_amount`, applying the same rounding logic as `distribute`.
     /// Does NOT transfer any tokens.
-    fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128>;
+    ///
+    /// # Errors
+    ///
+    /// - [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
+    /// - [`AutoShareError::InvalidAmount`] if `total_amount` is negative or
+    ///   causes an overflow in the intermediate multiplication.
+    /// - [`AutoShareError::InvalidPercentage`] if stored member data is invalid.
+    fn get_member_shares(
+        env: Env,
+        group_id: BytesN<32>,
+        total_amount: i128,
+    ) -> Result<Vec<i128>, AutoShareError>;
 
     /// Pure view: returns `total * percentage / 10_000` for arbitrary inputs.
-    fn get_calculated_share(env: Env, total: i128, percentage: u32) -> i128;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AutoShareError::InvalidAmount`] if `total * percentage` overflows
+    /// `i128`.
+    fn get_calculated_share(env: Env, total: i128, percentage: u32)
+        -> Result<i128, AutoShareError>;
 
-    /// Pure view: returns the total percentage (basis points) of all members in a group.
-    fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32;
+    /// Pure view: returns the total percentage (basis points) of all members in
+    /// a group.  A healthy group always returns 10 000.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
+    fn get_total_percentage(env: Env, group_id: BytesN<32>) -> Result<u32, AutoShareError>;
 }

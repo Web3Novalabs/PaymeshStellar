@@ -2,7 +2,11 @@ use crate::base::errors::AutoShareError;
 use crate::base::types::{AutoShareDetails, DataKey, GroupMember};
 use soroban_sdk::{Address, BytesN, Env};
 
-/// Validates that an amount is greater than zero
+/// Validates that an amount is greater than zero.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidAmount`] if `amount` is zero or negative.
 pub fn validate_amount(amount: i128) -> Result<(), AutoShareError> {
     if amount <= 0 {
         Err(AutoShareError::InvalidAmount)
@@ -11,21 +15,17 @@ pub fn validate_amount(amount: i128) -> Result<(), AutoShareError> {
     }
 }
 
-/// Validates that members' percentages sum to 10000 (100% in basis points)
-/// and that no member has zero percentage
+/// Validates that members' percentages sum to exactly 10 000 (100 % in basis
+/// points) and that no individual member has a zero percentage.
+///
+/// Delegates to the canonical implementation in [`crate::base::utils::validate_percentages`]
+/// so there is a single source of truth for this logic.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::InvalidPercentage`] if validation fails.
 pub fn validate_percentages(members: &soroban_sdk::Vec<GroupMember>) -> Result<(), AutoShareError> {
-    let mut total: u32 = 0;
-    for member in members.iter() {
-        if member.percentage == 0 {
-            return Err(AutoShareError::InvalidPercentage);
-        }
-        total += member.percentage;
-    }
-    if total != 10000 {
-        Err(AutoShareError::InvalidPercentage)
-    } else {
-        Ok(())
-    }
+    crate::base::utils::validate_percentages(members)
 }
 
 /// Validates that a group exists in storage and returns it

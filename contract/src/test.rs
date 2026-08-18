@@ -32,15 +32,20 @@ fn test_create_and_get() {
 }
 
 #[test]
-#[ignore]
 fn test_create_duplicate_group() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[1u8; 32]);
     let name = String::from_str(&env, "Payroll Team A");
 
     client.create(&id, &name, &creator, &3, &token);
-    // second create should not overwrite; ensure group exists
-    client.create(&id, &name, &creator, &3, &token);
+    // second create with the same id must return GroupAlreadyExists
+    let result = client.try_create(&id, &name, &creator, &3, &token);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::GroupAlreadyExists)),
+        "expected GroupAlreadyExists on duplicate create"
+    );
+    // original group must remain intact
     let details = client.get(&id);
     assert_eq!(details.name, name);
 }
@@ -79,7 +84,6 @@ fn test_update_members() {
 }
 
 #[test]
-#[ignore]
 fn test_update_members_invalid_percentage_too_low() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[3u8; 32]);
@@ -94,14 +98,19 @@ fn test_update_members_invalid_percentage_too_low() {
         },
     ];
 
-    client.update_members(&id, &creator, &members);
-    // ensure members not updated due to invalid percentages
+    // sum is 5000, not 10000 — must return InvalidPercentage
+    let result = client.try_update_members(&id, &creator, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::InvalidPercentage)),
+        "expected InvalidPercentage when sum != 10000"
+    );
+    // members must remain empty (update was rejected)
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
 }
 
 #[test]
-#[ignore]
 fn test_update_members_unauthorized() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[4u8; 32]);
@@ -118,18 +127,26 @@ fn test_update_members_unauthorized() {
         },
     ];
 
-    client.update_members(&id, &other_user, &members);
+    // caller is not the creator — must return Unauthorized
+    let result = client.try_update_members(&id, &other_user, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::Unauthorized)),
+        "expected Unauthorized when caller != creator"
+    );
+    // members must remain empty (update was rejected)
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
 }
 
 #[test]
-#[ignore]
 fn test_update_members_group_not_found() {
-    let (env, _, _, _token) = setup_env();
-    let id = BytesN::from_array(&env, &[99u8; 32]);
+    let (env, client, creator, token) = setup_env();
+    let missing_id = BytesN::from_array(&env, &[99u8; 32]);
 
-    let _members = vec![
+    // Use the contract client's try_ variant so the call runs inside the
+    // contract execution context (required for env.storage() access).
+    let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
@@ -137,13 +154,17 @@ fn test_update_members_group_not_found() {
             percentage: 10000,
         },
     ];
-
-    let result = base::validators::validate_group_exists(&env, &id);
-    assert_eq!(result, Err(AutoShareError::GroupNotFound));
+    let result = client.try_update_members(&missing_id, &creator, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::GroupNotFound)),
+        "expected GroupNotFound when group does not exist"
+    );
+    // suppress unused variable warnings
+    let _ = token;
 }
 
 #[test]
-#[ignore]
 fn test_update_members_duplicate_member() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[5u8; 32]);
@@ -166,13 +187,19 @@ fn test_update_members_duplicate_member() {
         },
     ];
 
-    client.update_members(&id, &creator, &members);
+    // same address appears twice — must return DuplicateMember
+    let result = client.try_update_members(&id, &creator, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::DuplicateMember)),
+        "expected DuplicateMember for repeated address"
+    );
+    // members must remain empty (update was rejected)
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
 }
 
 #[test]
-#[ignore]
 fn test_update_members_empty() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[6u8; 32]);
@@ -181,13 +208,19 @@ fn test_update_members_empty() {
 
     let members: soroban_sdk::Vec<GroupMember> = soroban_sdk::Vec::new(&env);
 
-    client.update_members(&id, &creator, &members);
+    // empty list — must return EmptyMembers
+    let result = client.try_update_members(&id, &creator, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::EmptyMembers)),
+        "expected EmptyMembers for an empty member list"
+    );
+    // members must remain empty (update was rejected)
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
 }
 
 #[test]
-#[ignore]
 fn test_update_members_with_zero_percentage() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[7u8; 32]);
@@ -211,7 +244,14 @@ fn test_update_members_with_zero_percentage() {
         },
     ];
 
-    client.update_members(&id, &creator, &members);
+    // zero percentage on any member — must return InvalidPercentage
+    let result = client.try_update_members(&id, &creator, &members);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::InvalidPercentage)),
+        "expected InvalidPercentage when a member has percentage == 0"
+    );
+    // members must remain empty (update was rejected)
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
 }
@@ -803,27 +843,33 @@ fn test_validate_is_creator_unauthorized() {
 }
 
 #[test]
-#[ignore]
 fn test_validate_group_exists() {
     let (env, client, creator, token) = setup_env();
     let id = BytesN::from_array(&env, &[50u8; 32]);
 
     client.create(&id, &String::from_str(&env, "Test"), &creator, &1, &token);
 
-    let result = base::validators::validate_group_exists(&env, &id);
-    assert!(result.is_ok());
-    let details = result.unwrap();
+    // Verify through the contract client: get() internally calls validate_group_exists.
+    // It must return the group without trapping.
+    let details = client.get(&id);
     assert_eq!(details.creator, creator);
 }
 
 #[test]
-#[ignore]
 fn test_validate_group_exists_not_found() {
-    let env = Env::default();
-    let id = BytesN::from_array(&env, &[99u8; 32]);
+    let (env, client, creator, token) = setup_env();
+    let missing_id = BytesN::from_array(&env, &[99u8; 32]);
 
-    let result = base::validators::validate_group_exists(&env, &id);
-    assert_eq!(result, Err(AutoShareError::GroupNotFound));
+    // Use the contract client's try_get so the call runs inside the contract
+    // execution context. Must return GroupNotFound, not trap.
+    let result = client.try_get(&missing_id);
+    assert_eq!(
+        result,
+        Err(Ok(AutoShareError::GroupNotFound)),
+        "expected GroupNotFound for a non-existent group id"
+    );
+    // suppress unused variable warnings
+    let _ = (creator, token);
 }
 
 #[test]
@@ -874,19 +920,19 @@ fn test_validate_member_exists_not_found() {
 
 #[test]
 fn test_calculate_share_normal() {
-    let share = base::utils::calculate_share(1000, 2500);
+    let share = base::utils::calculate_share(1000, 2500).unwrap();
     assert_eq!(share, 250);
 }
 
 #[test]
 fn test_calculate_share_zero() {
-    let share = base::utils::calculate_share(1000, 0);
+    let share = base::utils::calculate_share(1000, 0).unwrap();
     assert_eq!(share, 0);
 }
 
 #[test]
 fn test_calculate_share_full() {
-    let share = base::utils::calculate_share(1000, 10000);
+    let share = base::utils::calculate_share(1000, 10000).unwrap();
     assert_eq!(share, 1000);
 }
 
@@ -1208,4 +1254,191 @@ fn test_get_total_percentage() {
     client.update_members(&id, &creator, &members);
     let total = client.get_total_percentage(&id);
     assert_eq!(total, 10000);
+}
+
+// ── overflow boundary regression tests ────────────────────────────────────
+//
+// MAX_SAFE_TOTAL = i128::MAX / 10_000 = 17_014_118_346_046_923_173_168_730_371_588_410
+//
+// Defect found: calculate_share used .expect() so any amount above this boundary
+// caused an opaque trap instead of returning InvalidAmount.
+
+/// One unit below the overflow boundary — must succeed.
+#[test]
+fn test_calculate_share_overflow_boundary_safe() {
+    let max_safe = base::utils::MAX_SAFE_TOTAL;
+    // percentage = 10_000 maximises the intermediate product (total * 10_000)
+    let result = base::utils::calculate_share(max_safe, 10_000);
+    assert!(
+        result.is_ok(),
+        "expected Ok for total == MAX_SAFE_TOTAL, got {:?}",
+        result
+    );
+    assert_eq!(result.unwrap(), max_safe);
+}
+
+/// One unit above the overflow boundary — must return InvalidAmount, not trap.
+///
+/// Regression for: calculate_share panicked via .expect() instead of returning Err.
+#[test]
+fn test_calculate_share_overflow_boundary_over() {
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = base::utils::calculate_share(over_safe, 10_000);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total == MAX_SAFE_TOTAL + 1, got {:?}",
+        result
+    );
+}
+
+/// distribute_amounts with an overflow-triggering total must return Err, not trap.
+///
+/// Regression for: distribute used .expect("failed to distribute amounts") which
+/// turned the overflow into an opaque contract abort instead of a typed error.
+///
+/// The overflow boundary for `calculate_share` is `i128::MAX / percentage`.
+/// With two members at 5_000 bps each, the safe boundary is `i128::MAX / 5_000`.
+/// Any total strictly above that overflows the intermediate product `total * 5_000`.
+#[test]
+fn test_distribute_amounts_overflow_returns_err() {
+    let env = Env::default();
+    // With percentage = 5_000, overflow fires when total * 5_000 > i128::MAX,
+    // i.e. total > i128::MAX / 5_000.
+    let over_safe_5000 = i128::MAX / 5_000 + 1;
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5_000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5_000,
+        },
+    ];
+    // The first (non-final) member goes through calculate_share and must overflow.
+    let result = base::utils::distribute_amounts(&env, over_safe_5000, &members);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total > i128::MAX/5000, got {:?}",
+        result
+    );
+}
+
+/// get_calculated_share via contract client returns Err on overflow (no trap).
+///
+/// Regression for: get_calculated_share had no Result return type; overflow
+/// caused an opaque host trap instead of a typed error visible to callers.
+#[test]
+fn test_get_calculated_share_overflow() {
+    let (_env, client, _, _) = setup_env();
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = client.try_get_calculated_share(&over_safe, &10_000u32);
+    assert!(
+        result.is_err(),
+        "expected Err for overflowing get_calculated_share"
+    );
+}
+
+/// get_member_shares via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_member_shares used .expect("group not found") so callers
+/// received an opaque abort instead of the typed GroupNotFound error.
+#[test]
+fn test_get_member_shares_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let missing_id = BytesN::from_array(&env, &[0xddu8; 32]);
+    let result = client.try_get_member_shares(&missing_id, &1000);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// get_total_percentage via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_total_percentage used .expect("group not found") so
+/// callers received an opaque abort instead of a typed error.
+#[test]
+fn test_get_total_percentage_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let missing_id = BytesN::from_array(&env, &[0xeeu8; 32]);
+    let result = client.try_get_total_percentage(&missing_id);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// validate_percentages (canonical) rejects a zero-percentage member.
+///
+/// Regression for: the old utils::validate_percentages did NOT check for
+/// zero-percentage members, meaning a member with percentage=0 could slip
+/// through and receive dust-only payouts silently.
+#[test]
+fn test_regression_validate_percentages_rejects_zero_member() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Ghost"),
+            percentage: 0,
+        },
+    ];
+    // Both the utils (canonical) and validators (delegating) versions must reject.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+}
+
+/// validate_percentages (canonical) rejects overflow via checked_add.
+///
+/// Regression for: the old validators::validate_percentages used plain `+=`
+/// which, with overflow-checks=true in release, would trap instead of
+/// returning InvalidPercentage.
+#[test]
+fn test_regression_validate_percentages_overflow_safe() {
+    let env = Env::default();
+    // Two members whose raw sum overflows u32::MAX
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "A"),
+            percentage: u32::MAX / 2 + 1,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "B"),
+            percentage: u32::MAX / 2 + 1,
+        },
+    ];
+    // Must return InvalidPercentage, not trap.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
 }
