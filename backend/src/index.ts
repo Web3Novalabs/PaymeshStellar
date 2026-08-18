@@ -9,8 +9,12 @@ import { requestLogger } from './middleware/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import usersRouter from './routes/users.js';
 import authRouter from './routes/auth.js';
+import { authConfig, validateAuthEnvironment } from './config/auth.js';
+import { challengesService } from './services/challenges.js';
+import { sessionsService } from './services/sessions.js';
 
 dotenv.config();
+validateAuthEnvironment();
 
 if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
   throw new Error('CORS_ORIGIN must be set in production');
@@ -61,6 +65,15 @@ app.use(errorHandler);
 export { app };
 
 if (process.env.NODE_ENV !== 'test') {
+  const cleanupTimer = setInterval(() => {
+    Promise.all([challengesService.cleanup(), sessionsService.cleanup()]).catch(
+      (error: unknown) => {
+        console.error('Authentication cleanup failed:', error);
+      }
+    );
+  }, authConfig().cleanupIntervalSeconds * 1000);
+  cleanupTimer.unref();
+
   app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
   });

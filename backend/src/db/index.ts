@@ -7,6 +7,8 @@ import type { QueryResult, QueryResultRow } from 'pg';
  */
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Test processes should not be kept alive by an unused auth pool.
+  allowExitOnIdle: process.env.NODE_ENV === 'test',
 });
 
 /**
