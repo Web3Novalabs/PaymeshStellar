@@ -1,12 +1,94 @@
 import { API_ERROR_CODES } from './types';
 import type { ApiErrorCode, ApiErrorPayload } from './types';
-export class ApiError extends Error { readonly code: ApiErrorCode; readonly status: number; readonly details?: unknown; constructor(message: string, code: ApiErrorCode='UNKNOWN_ERROR', status=500, details?: unknown){super(message);this.name='ApiError';this.code=code;this.status=status;this.details=details;} }
-export class BadRequestError extends ApiError { constructor(p: ApiErrorPayload,s=400){super(p.message,'BAD_REQUEST',s,p.details);this.name='BadRequestError';} }
-export class UnauthorizedError extends ApiError { constructor(p: ApiErrorPayload,s=401){super(p.message,'UNAUTHORIZED',s,p.details);this.name='UnauthorizedError';} }
-export class ForbiddenError extends ApiError { constructor(p: ApiErrorPayload,s=403){super(p.message,'FORBIDDEN',s,p.details);this.name='ForbiddenError';} }
-export class NotFoundError extends ApiError { constructor(p: ApiErrorPayload,s=404){super(p.message,'NOT_FOUND',s,p.details);this.name='NotFoundError';} }
-export class ConflictError extends ApiError { constructor(p: ApiErrorPayload,s=409){super(p.message,'CONFLICT',s,p.details);this.name='ConflictError';} }
-export class ValidationError extends ApiError { constructor(p: ApiErrorPayload,s=422){super(p.message,'VALIDATION_ERROR',s,p.details);this.name='ValidationError';} }
-export class InternalServerError extends ApiError { constructor(p: ApiErrorPayload,s=500){super(p.message,'INTERNAL_ERROR',s,p.details);this.name='InternalServerError';} }
-export class NetworkError extends ApiError { constructor(m='The request could not be completed.'){super(m,'NETWORK_ERROR',0);this.name='NetworkError';} }
-export function toApiError(p: ApiErrorPayload,s:number): ApiError { const raw=p.code || (s>=500?'INTERNAL_ERROR':'UNKNOWN_ERROR'); const c: ApiErrorCode = raw==='INTERNAL_SERVER_ERROR'?'INTERNAL_ERROR':API_ERROR_CODES.includes(raw as ApiErrorCode)?raw as ApiErrorCode:'UNKNOWN_ERROR'; switch(c){case'BAD_REQUEST':return new BadRequestError(p,s);case'UNAUTHORIZED':return new UnauthorizedError(p,s);case'FORBIDDEN':return new ForbiddenError(p,s);case'NOT_FOUND':return new NotFoundError(p,s);case'CONFLICT':return new ConflictError(p,s);case'VALIDATION_ERROR':return new ValidationError(p,s);case'INTERNAL_ERROR':return new InternalServerError(p,s);default:return new ApiError(p.message,c,s,p.details);} }
+export class ApiError extends Error {
+  readonly code: ApiErrorCode;
+  readonly status: number;
+  readonly details?: unknown;
+  constructor(
+    message: string,
+    code: ApiErrorCode = 'UNKNOWN_ERROR',
+    status = 500,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
+export class BadRequestError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 400) {
+    super(p.message, 'BAD_REQUEST', s, p.details);
+    this.name = 'BadRequestError';
+  }
+}
+export class UnauthorizedError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 401) {
+    super(p.message, 'UNAUTHORIZED', s, p.details);
+    this.name = 'UnauthorizedError';
+  }
+}
+export class ForbiddenError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 403) {
+    super(p.message, 'FORBIDDEN', s, p.details);
+    this.name = 'ForbiddenError';
+  }
+}
+export class NotFoundError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 404) {
+    super(p.message, 'NOT_FOUND', s, p.details);
+    this.name = 'NotFoundError';
+  }
+}
+export class ConflictError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 409) {
+    super(p.message, 'CONFLICT', s, p.details);
+    this.name = 'ConflictError';
+  }
+}
+export class ValidationError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 422) {
+    super(p.message, 'VALIDATION_ERROR', s, p.details);
+    this.name = 'ValidationError';
+  }
+}
+export class InternalServerError extends ApiError {
+  constructor(p: ApiErrorPayload, s = 500) {
+    super(p.message, 'INTERNAL_ERROR', s, p.details);
+    this.name = 'InternalServerError';
+  }
+}
+export class NetworkError extends ApiError {
+  constructor(m = 'The request could not be completed.') {
+    super(m, 'NETWORK_ERROR', 0);
+    this.name = 'NetworkError';
+  }
+}
+export function toApiError(p: ApiErrorPayload, s: number): ApiError {
+  const raw = p.code || (s >= 500 ? 'INTERNAL_ERROR' : 'UNKNOWN_ERROR');
+  const c: ApiErrorCode =
+    raw === 'INTERNAL_SERVER_ERROR'
+      ? 'INTERNAL_ERROR'
+      : API_ERROR_CODES.includes(raw as ApiErrorCode)
+        ? (raw as ApiErrorCode)
+        : 'UNKNOWN_ERROR';
+  switch (c) {
+    case 'BAD_REQUEST':
+      return new BadRequestError(p, s);
+    case 'UNAUTHORIZED':
+      return new UnauthorizedError(p, s);
+    case 'FORBIDDEN':
+      return new ForbiddenError(p, s);
+    case 'NOT_FOUND':
+      return new NotFoundError(p, s);
+    case 'CONFLICT':
+      return new ConflictError(p, s);
+    case 'VALIDATION_ERROR':
+      return new ValidationError(p, s);
+    case 'INTERNAL_ERROR':
+      return new InternalServerError(p, s);
+    default:
+      return new ApiError(p.message, c, s, p.details);
+  }
+}

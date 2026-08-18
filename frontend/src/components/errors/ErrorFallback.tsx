@@ -1,3 +1,34 @@
 'use client';
 import { useEffect, useRef } from 'react';
-export default function ErrorFallback({error,reset,scope='app'}:{error:Error&{digest?:string};reset:()=>void;scope?:string}){const reported=useRef(false);useEffect(()=>{if(!reported.current){reported.current=true;console.error(`[${scope}]`,error);}},[error,scope]);return <main className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center"><p className="text-sm font-semibold uppercase tracking-wide text-red-600">Something went wrong</p><h1 className="mt-2 text-2xl font-bold">We could not load this page.</h1><button type="button" onClick={reset} className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Try again</button></main>;}
+export default function ErrorFallback({
+  error,
+  reset,
+  scope = 'app',
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+  scope?: string;
+}) {
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!reported.current) {
+      reported.current = true;
+      console.error(`[${scope}]`, error);
+    }
+  }, [error, scope]);
+  return (
+    <main className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+      <p className="text-sm font-semibold uppercase tracking-wide text-red-600">
+        Something went wrong
+      </p>
+      <h1 className="mt-2 text-2xl font-bold">We could not load this page.</h1>
+      <button
+        type="button"
+        onClick={reset}
+        className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+      >
+        Try again
+      </button>
+    </main>
+  );
+}
