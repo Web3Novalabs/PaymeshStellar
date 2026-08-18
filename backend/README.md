@@ -11,10 +11,10 @@ backend/
 │   ├── middleware/        # Auth middleware
 │   ├── routes/            # Express route handlers
 │   │   └── __tests__/    # Route integration tests
-│   ├── services/          # Business logic / in-memory stores
+│   ├── services/          # Business logic and PostgreSQL auth stores
 │   ├── types/             # Shared domain types (Group, GroupMember, …)
 │   ├── utils/             # Shared utilities (jwt, stellar, validation)
-│   ├── db/                # Database layer (future)
+│   ├── db/                # PostgreSQL pool, schema, and migrations
 │   ├── errors/            # Custom error classes (future)
 │   └── index.ts           # App entry point
 ├── dist/                  # Compiled JavaScript (generated)
@@ -52,7 +52,72 @@ Returns a welcome message confirming the API is reachable.
 - `helmet` sets standard HTTP security headers on every response
 - `cors` restricts `Access-Control-Allow-Origin` to `CORS_ORIGIN` (required in production)
 - Request bodies are limited to `50kb`
-- JWT tokens expire after 24 hours and use timing-safe signature verification
+- Wallet authentication uses standard SEP-10 challenge transaction XDR
+- Access JWTs expire after 15 minutes by default and are tied to revocable sessions
+- Refresh tokens are stored only as SHA-256 hashes and rotate after every use
+- Reusing a rotated refresh token revokes its entire family and records a security event
+- Nonce, transaction-hash, and refresh-token comparisons are timing-safe
+
+## Wallet authentication and sessions
+
+Run `npm run db:migrate` after deploying this version. Migration `002_auth_sessions_up.sql`
+adds persistent challenges, hashed refresh sessions, expiry indexes, and security events.
+
+```mermaid
+sequenceDiagram
+    participant W as Stellar wallet
+    participant API as Paymesh API
+    participant DB as PostgreSQL
+    participant H as Horizon
+
+    W->>API: POST /auth/challenge { address }
+    API->>DB: Store nonce + unsigned transaction hash + expiry
+    API-->>W: SEP-10 transaction XDR (server-signed, 300s)
+    W->>W: Sign XDR with required wallet signers
+    W->>API: POST /auth/verify { transaction }
+    API->>H: Load current signers and medium threshold
+    API->>API: Validate structure, server signature, time bounds, hash, and signature weight
+    API->>DB: Atomically consume nonce and create token family
+    API-->>W: Access JWT + Secure HttpOnly SameSite=Strict refresh cookie
+    W->>API: POST /auth/refresh (refresh cookie)
+    API->>DB: Rotate refresh hash and invalidate prior session
+    API-->>W: New access JWT + rotated refresh cookie
+    W->>API: POST /auth/logout or /auth/logout-all
+    API->>DB: Revoke current session or every wallet session
+```
+
+`POST /auth/challenge` returns `data.transaction` (also aliased as `data.xdr`) and
+the network passphrase. The transaction has sequence zero, a first manage-data
+operation named `<STELLAR_HOME_DOMAIN> auth` whose value is a 48-byte random nonce
+encoded as base64, a `web_auth_domain` operation, 300-second time bounds by default,
+and the server signature.
+
+Submit the wallet-signed envelope as `{ "transaction": "...base64 XDR..." }` to
+`POST /auth/verify`. On success, `data.accessToken` is returned in the body (the
+existing `data.token` alias remains available), while `paymesh_refresh` is set only
+as a `Secure; HttpOnly; SameSite=Strict` cookie. `POST /auth/refresh` rotates that
+cookie. `POST /auth/logout` revokes the current refresh session; authenticated
+`POST /auth/logout-all` revokes every session for `req.user.publicKey`. Protected
+requests validate the JWT session id, so revocation takes effect immediately.
+
+### Authentication environment variables
+
+| Variable                        | Required/default                                | Purpose                                                          |
+| ------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| `JWT_SECRET`                    | Required outside tests; at least 32 UTF-8 bytes | HS256 access-token key. Startup fails if missing or short.       |
+| `ACCESS_TOKEN_TTL_SECONDS`      | `900`                                           | Access JWT lifetime.                                             |
+| `REFRESH_TOKEN_TTL_SECONDS`     | `2592000`                                       | Refresh-session lifetime.                                        |
+| `CHALLENGE_TTL_SECONDS`         | `300`                                           | SEP-10 transaction time-bound lifetime.                          |
+| `AUTH_CLEANUP_INTERVAL_SECONDS` | `3600`                                          | Frequency of expired auth-row cleanup.                           |
+| `STELLAR_SIGNING_SECRET`        | Required outside tests                          | Secret seed used only to sign SEP-10 challenges.                 |
+| `STELLAR_HOME_DOMAIN`           | `localhost`                                     | SEP-10 home domain and `<domain> auth` operation prefix.         |
+| `STELLAR_WEB_AUTH_DOMAIN`       | `localhost`                                     | Expected `web_auth_domain` operation value.                      |
+| `STELLAR_NETWORK`               | Stellar testnet passphrase                      | Network passphrase used to build and verify XDR.                 |
+| `HORIZON_URL`                   | Stellar testnet Horizon                         | Loads current signer weights and medium threshold.               |
+| `DATABASE_URL`                  | Required for non-test auth                      | PostgreSQL connection used for challenges, sessions, and events. |
+
+The refresh cookie requires HTTPS. `SameSite=Strict` also means the frontend and
+API should be deployed as the same site (they may use different subdomains).
 
 ## Getting Started
 
@@ -131,11 +196,13 @@ pnpm --filter backend type-check
 This backend is automatically tested and built through GitHub Actions. See `.github/workflows/backend.yml` for the workflow configuration.
 
 The workflow runs on:
+
 - Push to `main` or `develop` branches
 - Pull requests to `main` or `develop` branches
 - Only when backend-related files change
 
 Check includes:
+
 - Dependencies installation
 - TypeScript type checking
 - ESLint linting
