@@ -1,53 +1,29 @@
+//! Basis-point calculations and deterministic distribution helpers.
+
 use crate::base::errors::AutoShareError;
 use crate::base::types::GroupMember;
 use soroban_sdk::{Env, Vec};
 
-// ── Overflow boundary documentation ──────────────────────────────────────────
-//
-// `calculate_share` computes  total * percentage / 10_000  using i128 arithmetic.
-// The intermediate product `total * percentage` must not exceed i128::MAX.
-//
-//   i128::MAX  =  170_141_183_460_469_231_731_687_303_715_884_105_727
-//   MAX_SAFE   =  i128::MAX / 10_000
-//              =   17_014_118_346_046_923_173_168_730_371_588_410
-//
-// Any `total` strictly greater than MAX_SAFE (with percentage = 10_000) will
-// overflow the multiplication.  Values up to and including MAX_SAFE are safe.
-//
-// This boundary is tested in `test_calculate_share_overflow_boundary` below.
-
-/// Maximum `total` value for which `total * 10_000` does not overflow `i128`.
-pub const MAX_SAFE_TOTAL: i128 = i128::MAX / 10_000;
-
-/// Calculates a member's share: `total * percentage / 10_000`.
+/// Calculates a member share as `total * percentage / 10_000`.
 ///
-/// Uses checked multiplication to detect overflow without panicking.
+/// `percentage` is expressed in basis points, where `10_000` equals 100%.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns [`AutoShareError::InvalidAmount`] if `total * percentage` would
-/// overflow `i128`.  Callers should treat this as a request for an amount that
-/// is too large for the on-chain integer representation.
-pub fn calculate_share(total: i128, percentage: u32) -> Result<i128, AutoShareError> {
-    let product = total
+/// Panics if the intermediate multiplication overflows `i128`.
+pub fn calculate_share(total: i128, percentage: u32) -> i128 {
+    total
         .checked_mul(percentage as i128)
         .ok_or(AutoShareError::InvalidAmount)?;
     Ok(product / 10_000)
 }
 
-/// Canonical single source of truth for percentage validation.
-///
-/// Validates that:
-/// - every member's individual percentage is non-zero (basis-point value must be ≥ 1), and
-/// - all percentages sum to exactly 10 000 (representing 100 %).
-///
-/// Uses `checked_add` so a crafted list whose raw sum would wrap `u32::MAX`
-/// returns [`AutoShareError::InvalidPercentage`] rather than trapping.
+/// Validates that member percentages total exactly `10_000` basis points.
 ///
 /// # Errors
 ///
-/// Returns [`AutoShareError::InvalidPercentage`] if any member has a zero
-/// percentage, if the sum overflows, or if the sum is not exactly 10 000.
+/// Returns [`AutoShareError::InvalidPercentage`] if addition overflows or the
+/// final total is not `10_000`.
 pub fn validate_percentages(members: &Vec<GroupMember>) -> Result<(), AutoShareError> {
     let mut sum: u32 = 0;
     for member in members.iter() {
@@ -65,18 +41,15 @@ pub fn validate_percentages(members: &Vec<GroupMember>) -> Result<(), AutoShareE
     }
 }
 
-/// Splits `total` by basis points with deterministic remainder handling so
-/// payouts sum exactly to `total`.
+/// Splits `total` using basis points and deterministic remainder handling.
 ///
-/// Rounds down (floor division) for every non-final member.  Any remaining
-/// dust — up to `(member_count − 1)` units — is assigned to the last member.
+/// Every share except the last uses floor division. The final member receives
+/// the remainder so all shares sum exactly to `total`.
 ///
 /// # Errors
 ///
-/// - [`AutoShareError::InvalidAmount`] if `total` is negative, or if the
-///   intermediate multiplication `total * percentage` overflows `i128`.
-/// - [`AutoShareError::InvalidPercentage`] if the member percentages do not
-///   validate (see [`validate_percentages`]).
+/// Returns [`AutoShareError::InvalidAmount`] for a negative total and
+/// [`AutoShareError::InvalidPercentage`] for an invalid member configuration.
 pub fn distribute_amounts(
     env: &Env,
     total: i128,

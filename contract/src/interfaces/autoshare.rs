@@ -1,9 +1,23 @@
+//! Abstract interface for AutoShare contract clients and implementations.
+
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember};
+use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress};
 
+/// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
+    /// One-time contract initialization.
+    ///
+    /// Sets the admin, stamps the schema version, and initializes the paused
+    /// flag to `false`. Returns [`AutoShareError::AlreadyInitialized`] on
+    /// repeated calls.
+    fn init(env: Env, admin: Address) -> Result<(), AutoShareError>;
+
+    /// Creates an empty group and indexes it by creator.
+    ///
+    /// The creator must authorize the call. Returns
+    /// [`AutoShareError::GroupAlreadyExists`] if `id` is already in use.
     fn create(
         env: Env,
         id: BytesN<32>,
@@ -13,6 +27,11 @@ pub trait AutoShareTrait {
         payment_token: Address,
     ) -> Result<(), AutoShareError>;
 
+    /// Replaces a group's complete member configuration.
+    ///
+    /// The caller must authorize the call and be the group creator. Returns
+    /// validation errors for missing groups, invalid percentages, duplicates,
+    /// empty lists, or unauthorized callers.
     fn update_members(
         env: Env,
         id: BytesN<32>,
@@ -20,10 +39,17 @@ pub trait AutoShareTrait {
         new_members: Vec<GroupMember>,
     ) -> Result<(), AutoShareError>;
 
+    /// Returns a group or [`AutoShareError::GroupNotFound`].
     fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError>;
 
+    /// Returns all stored groups indexed to `creator`.
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
 
+    /// Distributes a positive token amount using the group's configured shares.
+    ///
+    /// The funding address must authorize the call. Returns validation errors
+    /// for invalid amounts, missing groups, empty member lists, or insufficient
+    /// token balance.
     fn distribute(
         env: Env,
         id: BytesN<32>,
@@ -31,36 +57,36 @@ pub trait AutoShareTrait {
         amount: i128,
     ) -> Result<(), AutoShareError>;
 
-    /// Pure view: returns the share amounts each member of a group would receive
-    /// for `total_amount`, applying the same rounding logic as `distribute`.
-    /// Does NOT transfer any tokens.
+    /// Returns the amounts each member would receive without transferring tokens.
     ///
-    /// # Errors
-    ///
-    /// - [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
-    /// - [`AutoShareError::InvalidAmount`] if `total_amount` is negative or
-    ///   causes an overflow in the intermediate multiplication.
-    /// - [`AutoShareError::InvalidPercentage`] if stored member data is invalid.
-    fn get_member_shares(
-        env: Env,
-        group_id: BytesN<32>,
-        total_amount: i128,
-    ) -> Result<Vec<i128>, AutoShareError>;
+    /// Uses the same rounding and remainder allocation as [`Self::distribute`].
+    fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128>;
 
-    /// Pure view: returns `total * percentage / 10_000` for arbitrary inputs.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AutoShareError::InvalidAmount`] if `total * percentage` overflows
-    /// `i128`.
-    fn get_calculated_share(env: Env, total: i128, percentage: u32)
-        -> Result<i128, AutoShareError>;
+    /// Returns `total * percentage / 10_000` for arbitrary preview inputs.
+    fn get_calculated_share(env: Env, total: i128, percentage: u32) -> i128;
 
-    /// Pure view: returns the total percentage (basis points) of all members in
-    /// a group.  A healthy group always returns 10 000.
+    /// Returns the sum of a group's member percentages in basis points.
+    fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32;
+
+    /// Replaces the contract WASM with a new version.
     ///
-    /// # Errors
+    /// Admin-gated. The contract **must** be paused before upgrading. Emits
+    /// an `("autoshare", "upgraded")` event on success.
+    fn upgrade(env: Env, caller: Address, new_wasm_hash: BytesN<32>) -> Result<(), AutoShareError>;
+
+    /// Migrates up to `limit` groups from the old schema to the current one.
     ///
-    /// Returns [`AutoShareError::GroupNotFound`] if `group_id` does not exist.
-    fn get_total_percentage(env: Env, group_id: BytesN<32>) -> Result<u32, AutoShareError>;
+    /// Admin-gated. Returns [`MigrationProgress`] with the number of groups
+    /// migrated, remaining, and whether the job is done. When done, stamps the
+    /// schema version to [`crate::base::types::CURRENT_SCHEMA_VERSION`].
+    fn migrate(env: Env, caller: Address, limit: u32) -> Result<MigrationProgress, AutoShareError>;
+
+    /// Returns the contract's stored schema version (0 if never initialized).
+    fn schema_version(env: Env) -> u32;
+
+    /// Pauses the contract. Admin-gated.
+    fn pause(env: Env, caller: Address) -> Result<(), AutoShareError>;
+
+    /// Unpauses the contract. Admin-gated.
+    fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError>;
 }

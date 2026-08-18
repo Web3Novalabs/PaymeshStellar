@@ -46,3 +46,9 @@ Cargo.lock
 # Misc
 .cache
 .parcel-cache
+
+# Kiro IDE
+.kiro
+
+# Pull request notes
+pr-*.md

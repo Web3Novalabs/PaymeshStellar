@@ -1,0 +1,25 @@
+import Link from 'next/link';
+
+export default function DashboardPage() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <nav className="mb-6 flex flex-wrap gap-4 text-sm font-medium text-gray-600">
+          <Link href="/dashboard" className="text-blue-600 hover:underline">
+            Dashboard
+          </Link>
+          <Link href="/groups" className="transition hover:text-gray-900">
+            Groups
+          </Link>
+          <Link href="/settings" className="transition hover:text-gray-900">
+            Settings
+          </Link>
+        </nav>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-2 text-sm text-gray-500">
+          Review your current payroll activity and navigate to the main workspace sections.
+        </p>
+      </div>
+    </div>
+  );
+}
