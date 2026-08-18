@@ -29,6 +29,8 @@ pub enum AutoShareError {
     // Explicit variants requested by issue #54
     UnauthorizedAccess = 10,
     InvalidGroupId = 11,
+    /// The member has no escrow balance left to claim for this group.
+    NothingToClaim = 12,
 }
 
 impl AutoShareError {
@@ -63,6 +65,9 @@ impl AutoShareError {
             }
             AutoShareError::InvalidGroupId => {
                 "Invalid group ID. The provided group ID does not exist or is malformed."
+            }
+            AutoShareError::NothingToClaim => {
+                "Nothing to claim. This member has no escrowed balance in this group."
             }
         }
     }

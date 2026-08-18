@@ -2,7 +2,7 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Events as _},
+    testutils::{Address as _, Events as _, Ledger as _},
     vec, Address, BytesN, Env, String, Vec,
 };
 
@@ -780,4 +780,532 @@ fn test_distribute_emits_distributed_event() {
         has_distributed,
         "expected distributed event was not emitted"
     );
+}
+
+// ── escrow helpers ───────────────────────────────────────────────────────────
+
+/// Creates a token-backed group, mints `funding` to the creator, and returns the
+/// env, client, group id, payer, token address and the member addresses in order.
+fn setup_escrow(
+    id_byte: u8,
+    percentages: &[u32],
+    funding: i128,
+) -> (
+    Env,
+    AutoShareContractClient<'static>,
+    BytesN<32>,
+    Address,
+    Address,
+    Vec<Address>,
+) {
+    let (env, client, creator, token_address) = setup_token_env();
+    soroban_sdk::token::StellarAssetClient::new(&env, &token_address).mint(&creator, &funding);
+    let (id, members) = setup_group_with_members(
+        &env,
+        &client,
+        &creator,
+        &token_address,
+        id_byte,
+        percentages,
+    );
+    (env, client, id, creator, token_address, members)
+}
+
+/// Mirror of the Stellar asset contract's storage key layout.
+///
+/// Soroban encodes `#[contracttype]` enum keys by variant name, so this matches
+/// the real contract's `Balance(Address)` entry. It exists only so the TTL test
+/// can keep the payment token's own entries alive across a ledger jump.
+#[soroban_sdk::contracttype]
+enum SacDataKey {
+    Balance(Address),
+}
+
+/// Deterministic PRNG for the escrow fuzz test. `no_std`-friendly and seeded so
+/// a failure is always reproducible.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+
+    fn below(&mut self, bound: u64) -> u64 {
+        self.next() % bound
+    }
+}
+
+/// Reads the escrow accounting invariant from inside the contract's storage.
+fn escrow_accounting_holds(
+    env: &Env,
+    client: &AutoShareContractClient,
+    id: &BytesN<32>,
+    members: &Vec<Address>,
+) -> bool {
+    env.as_contract(&client.address, || {
+        base::escrow::accounting_holds(env, id, members)
+    })
+}
+
+// ── escrow: deposit ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_escrow_deposit_credits_each_member_and_total() {
+    let (env, client, id, payer, _token, members) = setup_escrow(10, &[6000, 4000], 1_000);
+
+    client.deposit(&id, &payer, &1_000);
+
+    assert_eq!(client.claimable_balance(&id, &members.get(0).unwrap()), 600);
+    assert_eq!(client.claimable_balance(&id, &members.get(1).unwrap()), 400);
+    assert_eq!(client.total_escrowed(&id), 1_000);
+    assert!(escrow_accounting_holds(&env, &client, &id, &members));
+}
+
+#[test]
+fn test_escrow_deposit_takes_custody_of_the_full_amount() {
+    let (env, client, id, payer, token, _members) = setup_escrow(11, &[5000, 5000], 1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+
+    client.deposit(&id, &payer, &600);
+
+    // One transfer out of the payer, into the contract — not N member transfers.
+    assert_eq!(token_client.balance(&payer), 400);
+    assert_eq!(token_client.balance(&client.address), 600);
+}
+
+#[test]
+fn test_escrow_deposit_accumulates_across_calls() {
+    let (env, client, id, payer, _token, members) = setup_escrow(12, &[5000, 5000], 1_000);
+
+    client.deposit(&id, &payer, &100);
+    client.deposit(&id, &payer, &300);
+
+    assert_eq!(client.claimable_balance(&id, &members.get(0).unwrap()), 200);
+    assert_eq!(client.claimable_balance(&id, &members.get(1).unwrap()), 200);
+    assert_eq!(client.total_escrowed(&id), 400);
+    assert!(escrow_accounting_holds(&env, &client, &id, &members));
+}
+
+#[test]
+fn test_escrow_deposit_empty_members_takes_no_custody() {
+    let (env, client, creator, token_address) = setup_token_env();
+    soroban_sdk::token::StellarAssetClient::new(&env, &token_address).mint(&creator, &1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+
+    let id = BytesN::from_array(&env, &[13u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "No Members"),
+        &creator,
+        &1,
+        &token_address,
+    );
+
+    let result = client.try_deposit(&id, &creator, &500);
+    assert_eq!(result, Err(Ok(AutoShareError::EmptyMembers)));
+
+    // The contract must not be left holding tokens nobody can claim.
+    assert_eq!(token_client.balance(&client.address), 0);
+    assert_eq!(token_client.balance(&creator), 1_000);
+    assert_eq!(client.total_escrowed(&id), 0);
+}
+
+#[test]
+fn test_escrow_deposit_rejects_non_positive_amounts() {
+    let (_env, client, id, payer, _token, _members) = setup_escrow(14, &[10000], 1_000);
+
+    assert_eq!(
+        client.try_deposit(&id, &payer, &0),
+        Err(Ok(AutoShareError::InvalidAmount))
+    );
+    assert_eq!(
+        client.try_deposit(&id, &payer, &-1),
+        Err(Ok(AutoShareError::InvalidAmount))
+    );
+    assert_eq!(client.total_escrowed(&id), 0);
+}
+
+#[test]
+fn test_escrow_deposit_rejects_unknown_group() {
+    let (env, client, _id, payer, _token, _members) = setup_escrow(15, &[10000], 1_000);
+    let missing = BytesN::from_array(&env, &[200u8; 32]);
+
+    assert_eq!(
+        client.try_deposit(&missing, &payer, &10),
+        Err(Ok(AutoShareError::GroupNotFound))
+    );
+}
+
+#[test]
+fn test_escrow_deposit_rejects_insufficient_balance() {
+    let (env, client, id, payer, token, _members) = setup_escrow(16, &[10000], 50);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+
+    assert_eq!(
+        client.try_deposit(&id, &payer, &51),
+        Err(Ok(AutoShareError::InsufficientBalance))
+    );
+    assert_eq!(token_client.balance(&payer), 50);
+    assert_eq!(token_client.balance(&client.address), 0);
+}
+
+// ── escrow: claim ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_escrow_claim_pays_member_and_clears_the_entry() {
+    let (env, client, id, payer, token, members) = setup_escrow(20, &[7000, 3000], 1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let alice = members.get(0).unwrap();
+
+    client.deposit(&id, &payer, &1_000);
+    let claimed = client.claim(&id, &alice);
+
+    assert_eq!(claimed, 700);
+    assert_eq!(token_client.balance(&alice), 700);
+    assert_eq!(client.claimable_balance(&id, &alice), 0);
+    assert_eq!(client.total_escrowed(&id), 300);
+    assert_eq!(token_client.balance(&client.address), 300);
+    assert!(escrow_accounting_holds(&env, &client, &id, &members));
+}
+
+#[test]
+fn test_escrow_claim_to_pays_an_alternate_address() {
+    let (env, client, id, payer, token, members) = setup_escrow(21, &[10000], 1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let member = members.get(0).unwrap();
+    let payout = Address::generate(&env);
+
+    client.deposit(&id, &payer, &400);
+    let claimed = client.claim_to(&id, &member, &payout);
+
+    assert_eq!(claimed, 400);
+    assert_eq!(token_client.balance(&payout), 400);
+    assert_eq!(token_client.balance(&member), 0);
+    assert_eq!(client.claimable_balance(&id, &member), 0);
+    assert_eq!(client.total_escrowed(&id), 0);
+}
+
+#[test]
+fn test_escrow_double_claim_returns_nothing_to_claim() {
+    let (env, client, id, payer, token, members) = setup_escrow(22, &[10000], 1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let member = members.get(0).unwrap();
+
+    client.deposit(&id, &payer, &250);
+    assert_eq!(client.claim(&id, &member), 250);
+
+    assert_eq!(
+        client.try_claim(&id, &member),
+        Err(Ok(AutoShareError::NothingToClaim))
+    );
+    // The second call moved nothing.
+    assert_eq!(token_client.balance(&member), 250);
+}
+
+#[test]
+fn test_escrow_claim_with_zero_balance_returns_nothing_to_claim() {
+    // 1 stroop across a 99.99% / 0.01% split floors the first member's share to
+    // zero, so they are a member with nothing owed.
+    let (_env, client, id, payer, _token, members) = setup_escrow(23, &[9999, 1], 1_000);
+    let starved = members.get(0).unwrap();
+
+    client.deposit(&id, &payer, &1);
+
+    assert_eq!(client.claimable_balance(&id, &starved), 0);
+    assert_eq!(
+        client.try_claim(&id, &starved),
+        Err(Ok(AutoShareError::NothingToClaim))
+    );
+}
+
+#[test]
+fn test_escrow_claim_by_non_member_returns_member_not_found() {
+    let (env, client, id, payer, token, _members) = setup_escrow(24, &[10000], 1_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let stranger = Address::generate(&env);
+
+    client.deposit(&id, &payer, &500);
+
+    assert_eq!(
+        client.try_claim(&id, &stranger),
+        Err(Ok(AutoShareError::MemberNotFound))
+    );
+    // Nothing moved: the stranger is empty and the escrow is untouched.
+    assert_eq!(token_client.balance(&stranger), 0);
+    assert_eq!(token_client.balance(&client.address), 500);
+    assert_eq!(client.total_escrowed(&id), 500);
+}
+
+#[test]
+fn test_escrow_claim_rejects_unknown_group() {
+    let (env, client, _id, _payer, _token, members) = setup_escrow(25, &[10000], 1_000);
+    let missing = BytesN::from_array(&env, &[201u8; 32]);
+
+    assert_eq!(
+        client.try_claim(&missing, &members.get(0).unwrap()),
+        Err(Ok(AutoShareError::GroupNotFound))
+    );
+}
+
+// ── escrow: snapshot semantics ───────────────────────────────────────────────
+
+#[test]
+fn test_escrow_credits_survive_a_full_member_replacement() {
+    let (env, client, id, payer, token, original) = setup_escrow(30, &[6000, 4000], 10_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let alice = original.get(0).unwrap();
+    let bob = original.get(1).unwrap();
+
+    client.deposit(&id, &payer, &1_000);
+
+    // Swap the entire member list out for a different set.
+    let carol = Address::generate(&env);
+    let dave = Address::generate(&env);
+    let replacements = vec![
+        &env,
+        GroupMember {
+            address: carol.clone(),
+            name: String::from_str(&env, "Carol"),
+            percentage: 5000,
+        },
+        GroupMember {
+            address: dave.clone(),
+            name: String::from_str(&env, "Dave"),
+            percentage: 5000,
+        },
+    ];
+    client.update_members(&id, &payer, &replacements);
+
+    // The original members keep exactly what the earlier deposit credited them.
+    assert_eq!(client.claimable_balance(&id, &alice), 600);
+    assert_eq!(client.claimable_balance(&id, &bob), 400);
+    assert_eq!(client.claimable_balance(&id, &carol), 0);
+    assert_eq!(client.claimable_balance(&id, &dave), 0);
+
+    assert_eq!(client.claim(&id, &alice), 600);
+    assert_eq!(client.claim(&id, &bob), 400);
+    assert_eq!(token_client.balance(&alice), 600);
+    assert_eq!(token_client.balance(&bob), 400);
+    assert_eq!(client.total_escrowed(&id), 0);
+
+    // A later deposit credits only the new member set.
+    client.deposit(&id, &payer, &200);
+    assert_eq!(client.claimable_balance(&id, &carol), 100);
+    assert_eq!(client.claimable_balance(&id, &dave), 100);
+    assert_eq!(client.claimable_balance(&id, &alice), 0);
+}
+
+// ── escrow: accounting ───────────────────────────────────────────────────────
+
+#[test]
+fn test_escrow_no_dust_leaks_across_100_uneven_deposits() {
+    // 1_000 over 7 members at 1429/1429/1429/1429/1429/1428/1427 bps never
+    // divides evenly, so every deposit produces remainder dust.
+    let percentages = [1429u32, 1429, 1429, 1429, 1429, 1428, 1427];
+    let (env, client, id, payer, token, members) = setup_escrow(31, &percentages, 1_000_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+
+    let deposit_amount: i128 = 1_000;
+    for _ in 0..100 {
+        client.deposit(&id, &payer, &deposit_amount);
+    }
+
+    let total_deposited = deposit_amount * 100;
+    let summed = env.as_contract(&client.address, || {
+        base::escrow::sum_claimable(&env, &id, &members)
+    });
+
+    assert_eq!(summed, total_deposited, "stroops leaked across deposits");
+    assert_eq!(client.total_escrowed(&id), total_deposited);
+    assert_eq!(token_client.balance(&client.address), total_deposited);
+
+    // And every stroop is actually payable.
+    let mut paid: i128 = 0;
+    for member in members.iter() {
+        paid += client.claim(&id, &member);
+    }
+    assert_eq!(paid, total_deposited);
+    assert_eq!(client.total_escrowed(&id), 0);
+    assert_eq!(token_client.balance(&client.address), 0);
+}
+
+#[test]
+fn test_escrow_fuzz_deposits_and_claims_hold_the_invariant() {
+    let percentages = [3333u32, 3333, 3334];
+    let (env, client, id, payer, token, members) = setup_escrow(32, &percentages, 1_000_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+
+    let mut rng = Lcg(0x5EED_1234_ABCD_0001);
+    let mut deposited: i128 = 0;
+    let mut claimed: i128 = 0;
+
+    for _ in 0..120 {
+        if rng.below(2) == 0 {
+            let amount = (rng.below(997) + 1) as i128;
+            client.deposit(&id, &payer, &amount);
+            deposited += amount;
+        } else {
+            let member = members.get(rng.below(members.len() as u64) as u32).unwrap();
+            // A claim is only legal when something is owed; an empty member
+            // must report NothingToClaim rather than move tokens.
+            let owed = client.claimable_balance(&id, &member);
+            if owed > 0 {
+                assert_eq!(client.claim(&id, &member), owed);
+                claimed += owed;
+            } else {
+                assert_eq!(
+                    client.try_claim(&id, &member),
+                    Err(Ok(AutoShareError::NothingToClaim))
+                );
+            }
+        }
+
+        // The invariant must hold after every single step.
+        assert!(
+            escrow_accounting_holds(&env, &client, &id, &members),
+            "sum(claimable) != total_escrowed"
+        );
+        assert_eq!(client.total_escrowed(&id), deposited - claimed);
+        assert_eq!(token_client.balance(&client.address), deposited - claimed);
+    }
+
+    assert!(
+        deposited > 0 && claimed > 0,
+        "fuzz run exercised both paths"
+    );
+}
+
+#[test]
+fn test_escrow_totals_across_groups_never_exceed_contract_balance() {
+    let (env, client, creator, token_address) = setup_token_env();
+    soroban_sdk::token::StellarAssetClient::new(&env, &token_address).mint(&creator, &100_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+
+    let (first, first_members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 33, &[5000, 5000]);
+    let (second, second_members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 34, &[2500, 7500]);
+
+    client.deposit(&first, &creator, &1_111);
+    client.deposit(&second, &creator, &2_222);
+    client.claim(&first, &first_members.get(0).unwrap());
+
+    let combined = client.total_escrowed(&first) + client.total_escrowed(&second);
+    assert!(combined <= token_client.balance(&client.address));
+    assert_eq!(combined, token_client.balance(&client.address));
+
+    // Each group's books balance independently.
+    assert!(escrow_accounting_holds(
+        &env,
+        &client,
+        &first,
+        &first_members
+    ));
+    assert!(escrow_accounting_holds(
+        &env,
+        &client,
+        &second,
+        &second_members
+    ));
+}
+
+// ── escrow: write ordering (reentrancy) ──────────────────────────────────────
+
+#[test]
+fn test_escrow_settle_clears_state_before_any_transfer() {
+    let (env, client, id, payer, token, members) = setup_escrow(35, &[6000, 4000], 10_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let alice = members.get(0).unwrap();
+
+    client.deposit(&id, &payer, &1_000);
+
+    // `claim_to` runs `settle_claim` to completion and only then calls the token
+    // contract. Driving the effects half on its own shows the exact state a
+    // reentrant token would see: the entry is already gone and the group total
+    // already decremented, while not a single stroop has moved.
+    let settled = env.as_contract(&client.address, || {
+        let details = base::auth::validate_group_exists(&env, &id).unwrap();
+        base::escrow::settle_claim(&env, &id, &alice, &details).unwrap()
+    });
+
+    assert_eq!(settled, 600);
+    assert_eq!(client.claimable_balance(&id, &alice), 0);
+    assert_eq!(client.total_escrowed(&id), 400);
+    assert_eq!(token_client.balance(&alice), 0);
+    assert_eq!(token_client.balance(&client.address), 1_000);
+
+    // A reentrant second attempt at that point finds nothing left to take.
+    let reentrant = env.as_contract(&client.address, || {
+        let details = base::auth::validate_group_exists(&env, &id).unwrap();
+        base::escrow::settle_claim(&env, &id, &alice, &details)
+    });
+    assert_eq!(reentrant, Err(AutoShareError::NothingToClaim));
+}
+
+// ── escrow: TTL ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_escrow_entries_survive_ledger_advance_past_default_ttl() {
+    let (env, client, id, payer, token, members) = setup_escrow(36, &[10000], 10_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let member = members.get(0).unwrap();
+
+    client.deposit(&id, &payer, &750);
+
+    // The escrow contract can only extend entries it owns, so the payment token's
+    // instance and the escrow's balance entry inside it have to be kept alive
+    // separately. On a real network an asset contract stays live off its own
+    // traffic; here the test stands in for that. `SacDataKey` mirrors the Stellar
+    // asset contract's own key layout, which is encoded by variant name.
+    env.as_contract(&token, || {
+        env.storage().instance().extend_ttl(
+            base::escrow::ESCROW_TTL_THRESHOLD,
+            base::escrow::ESCROW_TTL_EXTEND_TO,
+        );
+        env.storage().persistent().extend_ttl(
+            &SacDataKey::Balance(client.address.clone()),
+            base::escrow::ESCROW_TTL_THRESHOLD,
+            base::escrow::ESCROW_TTL_EXTEND_TO,
+        );
+    });
+
+    // Well past the 4_096-ledger default persistent TTL, and inside the 120-day
+    // window `deposit` extended every entry it wrote to.
+    let advance = 60 * base::escrow::LEDGERS_PER_DAY;
+    assert!(advance > 4_096);
+    env.ledger().with_mut(|li| {
+        li.sequence_number += advance;
+    });
+
+    assert_eq!(client.claimable_balance(&id, &member), 750);
+    assert_eq!(client.total_escrowed(&id), 750);
+    assert_eq!(client.claim(&id, &member), 750);
+    assert_eq!(token_client.balance(&member), 750);
+}
+
+// ── escrow: additive, not a replacement ──────────────────────────────────────
+
+#[test]
+fn test_distribute_still_works_alongside_escrow() {
+    let (env, client, id, payer, token, members) = setup_escrow(37, &[6000, 4000], 10_000);
+    let token_client = soroban_sdk::token::Client::new(&env, &token);
+    let alice = members.get(0).unwrap();
+    let bob = members.get(1).unwrap();
+
+    // The push path is unchanged and pays members directly.
+    client.distribute(&id, &payer, &1_000);
+    assert_eq!(token_client.balance(&alice), 600);
+    assert_eq!(token_client.balance(&bob), 400);
+    assert_eq!(client.total_escrowed(&id), 0);
+    assert_eq!(client.claimable_balance(&id, &alice), 0);
+
+    // And the pull path works on the same group afterwards.
+    client.deposit(&id, &payer, &500);
+    assert_eq!(client.claimable_balance(&id, &alice), 300);
+    assert_eq!(client.claim(&id, &alice), 300);
+    assert_eq!(token_client.balance(&alice), 900);
 }

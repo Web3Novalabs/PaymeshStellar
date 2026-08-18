@@ -60,4 +60,33 @@ pub trait AutoShareTrait {
 
     /// Returns the sum of a group's member percentages in basis points.
     fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32;
+
+    /// Takes custody of `amount` and credits it to the group's current members.
+    ///
+    /// The escrow counterpart to [`Self::distribute`]: one transfer in, and each
+    /// member withdraws later via [`Self::claim`]. Credits are a snapshot of the
+    /// member set at deposit time.
+    fn deposit(env: Env, id: BytesN<32>, from: Address, amount: i128)
+        -> Result<(), AutoShareError>;
+
+    /// Pays a member's full accrued escrow balance out to themselves.
+    ///
+    /// Returns the amount transferred.
+    fn claim(env: Env, id: BytesN<32>, member: Address) -> Result<i128, AutoShareError>;
+
+    /// Pays a member's full accrued escrow balance out to another address.
+    ///
+    /// Returns the amount transferred. Only `member` authorizes the call.
+    fn claim_to(
+        env: Env,
+        id: BytesN<32>,
+        member: Address,
+        to: Address,
+    ) -> Result<i128, AutoShareError>;
+
+    /// Returns the amount `member` may currently claim from the group.
+    fn claimable_balance(env: Env, id: BytesN<32>, member: Address) -> i128;
+
+    /// Returns the total amount held in escrow for the group.
+    fn total_escrowed(env: Env, id: BytesN<32>) -> i128;
 }

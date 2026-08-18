@@ -286,6 +286,105 @@ mod contract_impl {
             }
             sum
         }
+
+        /// Takes custody of `amount` and credits it across the group's members.
+        ///
+        /// The pull-payment counterpart to [`Self::distribute`]. The tokens move
+        /// in a single transfer from `from` to this contract, and each member is
+        /// credited their basis-point share using the same floor-plus-dust math
+        /// as `distribute`, so no stroops are lost across repeated deposits.
+        ///
+        /// Credits are a **snapshot** of the member set at deposit time. A later
+        /// `update_members` never moves an already-credited balance, and a member
+        /// removed from the group keeps whatever they had accrued.
+        ///
+        /// Every write extends the touched entry's TTL — see
+        /// [`base::escrow`] for the policy and its rent cost.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `id`: Identifier of the group to credit.
+        /// - `from`: Token holder funding the escrow.
+        /// - `amount`: Positive token amount to take into custody.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::InvalidAmount`],
+        /// [`AutoShareError::GroupNotFound`], [`AutoShareError::EmptyMembers`],
+        /// [`AutoShareError::InsufficientBalance`], or
+        /// [`AutoShareError::InvalidPercentage`]. No tokens move unless every
+        /// validation passes.
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `from` does not authorize the call or if the token
+        /// contract rejects the transfer.
+        fn deposit(
+            env: Env,
+            id: BytesN<32>,
+            from: Address,
+            amount: i128,
+        ) -> Result<(), AutoShareError> {
+            base::escrow::deposit(&env, &id, &from, amount)
+        }
+
+        /// Pays `member`'s full accrued escrow balance out to themselves.
+        ///
+        /// Returns the amount transferred. The member's entry is cleared before
+        /// the token transfer, so a reentrant token contract observes a zero
+        /// balance and cannot be paid twice.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::GroupNotFound`],
+        /// [`AutoShareError::NothingToClaim`] when a current member has no
+        /// balance left (a second claim included), or
+        /// [`AutoShareError::MemberNotFound`] when the address holds no balance
+        /// and is not a member. Neither error moves tokens.
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `member` does not authorize the call.
+        fn claim(env: Env, id: BytesN<32>, member: Address) -> Result<i128, AutoShareError> {
+            base::escrow::claim(&env, &id, &member)
+        }
+
+        /// Pays `member`'s full accrued escrow balance out to `to`.
+        ///
+        /// Identical to [`Self::claim`] except for the destination. Only
+        /// `member` authorizes the call; `to` is an arbitrary payout address.
+        ///
+        /// # Errors
+        ///
+        /// See [`Self::claim`].
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `member` does not authorize the call.
+        fn claim_to(
+            env: Env,
+            id: BytesN<32>,
+            member: Address,
+            to: Address,
+        ) -> Result<i128, AutoShareError> {
+            base::escrow::claim_to(&env, &id, &member, &to)
+        }
+
+        /// Returns the amount `member` may currently claim from group `id`.
+        ///
+        /// Returns `0` for an unknown group, an uncredited address, or a member
+        /// who has already claimed.
+        fn claimable_balance(env: Env, id: BytesN<32>, member: Address) -> i128 {
+            base::escrow::claimable_balance(&env, &id, &member)
+        }
+
+        /// Returns the total amount held in escrow for group `id`.
+        ///
+        /// Always equal to the sum of the group's outstanding claimable balances.
+        fn total_escrowed(env: Env, id: BytesN<32>) -> i128 {
+            base::escrow::total_escrowed(&env, &id)
+        }
     }
 }
 
