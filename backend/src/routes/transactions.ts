@@ -2,15 +2,9 @@ import { Response, Router } from 'express';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth.js';
 import { transactionDataSource, TransactionFilter } from '../services/transactions.js';
 import { groupsService } from '../services/groups.js';
+import { isValidStellarAddress } from '../utils/stellar.js';
 
 const router: Router = Router();
-
-// Stellar address validation regex (G... format, 56 characters, Base32 alphabet)
-const STELLAR_ADDRESS_REGEX = /^G[A-D][A-Z2-7]{54}$/;
-
-function isValidStellarAddress(address: string): boolean {
-  return STELLAR_ADDRESS_REGEX.test(address);
-}
 
 /**
  * GET /api/transactions
