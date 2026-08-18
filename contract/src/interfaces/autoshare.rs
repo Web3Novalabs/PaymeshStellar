@@ -1,9 +1,23 @@
+//! Abstract interface for AutoShare contract clients and implementations.
+
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
 use crate::base::types::{AutoShareDetails, GroupMember};
 
+/// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
+    /// One-time contract initialization.
+    ///
+    /// Sets the admin, stamps the schema version, and initializes the paused
+    /// flag to `false`. Returns [`AutoShareError::AlreadyInitialized`] on
+    /// repeated calls.
+    fn init(env: Env, admin: Address) -> Result<(), AutoShareError>;
+
+    /// Creates an empty group and indexes it by creator.
+    ///
+    /// The creator must authorize the call. Returns
+    /// [`AutoShareError::GroupAlreadyExists`] if `id` is already in use.
     fn create(
         env: Env,
         id: BytesN<32>,
@@ -22,6 +36,7 @@ pub trait AutoShareTrait {
 
     fn get(env: Env, id: BytesN<32>) -> Result<AutoShareDetails, AutoShareError>;
 
+    /// Returns all stored groups indexed to `creator`.
     fn get_groups_by_creator(env: Env, creator: Address) -> Vec<AutoShareDetails>;
 
     fn distribute(

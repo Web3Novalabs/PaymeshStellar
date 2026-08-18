@@ -1,6 +1,8 @@
-use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, DataKey, GroupMember};
-use soroban_sdk::{Address, BytesN, Env};
+//! Re-exports all validation and authorization helpers from [`auth`].
+//!
+//! This module provides a backward-compatible namespace so that existing
+//! call-sites written against `base::validators` continue to work. All
+//! implementations live in [`crate::base::auth`].
 
 /// Validates that an amount is greater than zero.
 ///

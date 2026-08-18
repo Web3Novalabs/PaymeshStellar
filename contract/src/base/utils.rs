@@ -1,3 +1,5 @@
+//! Basis-point calculations and deterministic distribution helpers.
+
 use crate::base::errors::AutoShareError;
 use crate::base::types::GroupMember;
 use soroban_sdk::{Env, Vec};
