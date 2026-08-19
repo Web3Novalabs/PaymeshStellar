@@ -66,9 +66,14 @@ jobs:
         working-directory: contract
         run: cargo build
 
-      - name: Build wasm (stellar contract build)
+      # `stellar contract build` emits wasm32v1-none only on newer CLIs; the one
+      # pinned above still targets wasm32-unknown-unknown, so the verify step
+      # below never found its artifact. Building through cargo with the target
+      # the Makefile already uses makes the output path correct by construction
+      # and drops the dependency on the pinned CLI version.
+      - name: Build wasm (wasm32v1-none, release)
         working-directory: contract
-        run: stellar contract build
+        run: cargo build --target wasm32v1-none --release
 
       - name: Verify wasm artifact exists
         working-directory: contract
