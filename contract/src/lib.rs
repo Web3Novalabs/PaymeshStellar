@@ -304,7 +304,12 @@ mod contract_impl {
         ///
         /// Panics if multiplying `total` by `percentage` overflows `i128`.
         fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
-            base::utils::calculate_share(total, percentage)
+            // `calculate_share` returns a typed error now, but this entrypoint's
+            // trait signature is still `-> i128`, so an out-of-range preview
+            // aborts exactly as the doc comment above says. Widening it to
+            // `Result<i128, AutoShareError>` is an ABI change and is left to
+            // whoever owns that refactor.
+            base::utils::calculate_share(total, percentage).expect("overflow in calculate_share")
         }
 
         /// Returns the sum of all member percentages for a group.
@@ -322,6 +327,185 @@ mod contract_impl {
                 sum = sum.saturating_add(member.percentage);
             }
             sum
+        }
+
+        /// Upgrades the contract WASM executable to a new hash.
+        ///
+        /// The caller must be the contract admin, and the contract must be paused.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the upgrade.
+        /// - `new_wasm_hash`: 32-byte hash of the newly installed WASM.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::ContractNotPaused`] if the contract is active.
+        fn upgrade(
+            env: Env,
+            caller: Address,
+            new_wasm_hash: BytesN<32>,
+        ) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            require_paused(&env)?;
+
+            env.deployer()
+                .update_current_contract_wasm(new_wasm_hash.clone());
+            events::upgraded(&env, &new_wasm_hash);
+            Ok(())
+        }
+
+        /// Performs batched migration of stored groups to [`CURRENT_SCHEMA_VERSION`].
+        ///
+        /// The caller must be the contract admin. Processes up to `limit` groups
+        /// per call using a persisted cursor.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the migration.
+        /// - `limit`: Maximum number of groups to migrate in this transaction.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::NothingToMigrate`] if already at the current schema version.
+        fn migrate(
+            env: Env,
+            caller: Address,
+            limit: u32,
+        ) -> Result<MigrationProgress, AutoShareError> {
+            require_admin(&env, &caller)?;
+
+            let current_schema: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0);
+
+            if current_schema == CURRENT_SCHEMA_VERSION {
+                return Err(AutoShareError::NothingToMigrate);
+            }
+
+            let all_ids: Vec<BytesN<32>> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::AllGroups)
+                .unwrap_or(Vec::new(&env));
+
+            let total_groups = all_ids.len();
+            let cursor: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::MigrationCursor)
+                .unwrap_or(0);
+
+            if total_groups == 0 || cursor >= total_groups {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+                events::migrated(&env, 0, 0);
+                return Ok(MigrationProgress {
+                    migrated: 0,
+                    remaining: 0,
+                    done: true,
+                });
+            }
+
+            let end = (cursor + limit).min(total_groups);
+            let mut count: u32 = 0;
+
+            use soroban_sdk::{Map, TryFromVal, Val};
+
+            for i in cursor..end {
+                let id = all_ids.get(i).unwrap();
+                let key = DataKey::Group(id.clone());
+
+                if let Some(val) = env.storage().persistent().get::<DataKey, Val>(&key) {
+                    if let Ok(map) = Map::<Val, Val>::try_from_val(&env, &val) {
+                        if map.len() == 6 {
+                            if let Ok(v1) = AutoShareDetailsV1::try_from_val(&env, &val) {
+                                let v2 = AutoShareDetails {
+                                    id: v1.id,
+                                    name: v1.name,
+                                    creator: v1.creator,
+                                    usage_count: v1.usage_count,
+                                    payment_token: v1.payment_token,
+                                    members: v1.members,
+                                    version: CURRENT_SCHEMA_VERSION,
+                                };
+                                env.storage().persistent().set(&key, &v2);
+                            }
+                        } else if map.len() == 7 {
+                            if let Ok(mut v2) = AutoShareDetails::try_from_val(&env, &val) {
+                                if v2.version != CURRENT_SCHEMA_VERSION {
+                                    v2.version = CURRENT_SCHEMA_VERSION;
+                                    env.storage().persistent().set(&key, &v2);
+                                }
+                            }
+                        }
+                    }
+                }
+                count += 1;
+            }
+
+            let new_cursor = end;
+            let remaining = total_groups - new_cursor;
+            let done = remaining == 0;
+
+            if done {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+            } else {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::MigrationCursor, &new_cursor);
+            }
+
+            events::migrated(&env, count, remaining);
+
+            Ok(MigrationProgress {
+                migrated: count,
+                remaining,
+                done,
+            })
+        }
+
+        /// Returns the current schema version stamped in contract instance storage.
+        fn schema_version(env: Env) -> u32 {
+            env.storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0)
+        }
+
+        /// Pauses the contract, allowing administrative maintenance and upgrades.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn pause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &true);
+            events::paused(&env);
+            Ok(())
+        }
+
+        /// Unpauses the contract, resuming normal operation.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &false);
+            events::unpaused(&env);
+            Ok(())
         }
 
         /// Takes custody of `amount` and credits it across the group's members.

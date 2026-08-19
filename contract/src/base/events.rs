@@ -30,6 +30,33 @@ pub fn distributed(env: &Env, id: &BytesN<32>, from: &Address, amount: i128) {
     );
 }
 
+/// Publishes an `("autoshare", "upgraded")` event.
+///
+/// Topics are `"autoshare"` and `"upgraded"`. The payload is the new WASM hash.
+pub fn upgraded(env: &Env, new_wasm_hash: &BytesN<32>) {
+    env.events()
+        .publish(("autoshare", "upgraded"), new_wasm_hash.clone());
+}
+
+/// Publishes an `("autoshare", "migrated")` event.
+///
+/// Topics are `"autoshare"` and `"migrated"`. The payload is
+/// `(migrated_count, remaining_count)`.
+pub fn migrated(env: &Env, migrated_count: u32, remaining_count: u32) {
+    env.events()
+        .publish(("autoshare", "migrated"), (migrated_count, remaining_count));
+}
+
+/// Publishes an `("autoshare", "paused")` event.
+pub fn paused(env: &Env) {
+    env.events().publish(("autoshare", "paused"), ());
+}
+
+/// Publishes an `("autoshare", "unpaused")` event.
+pub fn unpaused(env: &Env) {
+    env.events().publish(("autoshare", "unpaused"), ());
+}
+
 /// Publishes an `("autoshare", "escrow_deposited")` event.
 ///
 /// Topics are `"autoshare"` and `"escrow_deposited"`. The payload is

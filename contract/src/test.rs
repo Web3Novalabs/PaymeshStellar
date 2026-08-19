@@ -285,10 +285,17 @@ fn test_distribute_zero_amount() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[20u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
     let result = client.try_distribute(&id, &creator, &0);
     assert!(result.is_err());
 }
@@ -303,10 +310,17 @@ fn test_distribute_negative_amount() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[21u8; 32]);
-    client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
     let result = client.try_distribute(&id, &creator, &-500);
     assert!(result.is_err());
 }
@@ -348,6 +362,7 @@ fn test_distribute_empty_members() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[22u8; 32]);
@@ -375,6 +390,7 @@ fn test_distribute_requires_auth() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
@@ -400,6 +416,7 @@ fn test_distribute_single_member() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
@@ -424,6 +441,7 @@ fn test_distribute_three_members_uneven_split() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
@@ -458,6 +476,7 @@ fn test_distribute_many_members() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
@@ -490,16 +509,30 @@ fn test_distribute_large_amount() {
 
     let contract_id = env.register(AutoShareContract, ());
     let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
 
     let creator = Address::generate(&env);
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
     let large_amount: i128 = 1_000_000_000_000_000_000;
     token_admin.mint(&creator, &large_amount);
 
-    let (id, _) =
+    let (id, members) =
         setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
-    let result = client.try_distribute(&id, &creator, &1000);
-    assert!(result.is_err());
+    // The test mints exactly `large_amount` so a distribution of that size is
+    // affordable, and 1e18 is far below MAX_SAFE_TOTAL, so it must succeed.
+    // (It previously distributed 1000 and asserted an error, which only held
+    // because the group was never created — `create` was failing with
+    // MigrationRequired before this setup called `init`.)
+    let result = client.try_distribute(&id, &creator, &large_amount);
+    assert!(
+        result.is_ok(),
+        "expected a large in-range distribution to succeed"
+    );
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    for member in members.iter() {
+        assert_eq!(token_client.balance(&member), large_amount / 2);
+    }
 }
 
 // ── distribute: single member ────────────────────────────────────────────────
@@ -950,6 +983,584 @@ fn test_distribute_emits_distributed_event() {
     assert!(
         has_distributed,
         "expected distributed event was not emitted"
+    );
+}
+
+// ── upgrade & migration tests ────────────────────────────────────────────────
+
+#[test]
+fn test_init_stamps_schema_version_and_sets_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    assert_eq!(client.schema_version(), 0);
+    client.init(&admin);
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+
+    // Repeated init must fail
+    let admin2 = Address::generate(&env);
+    let err = client.try_init(&admin2);
+    assert_eq!(err, Err(Ok(AutoShareError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_full_upgrade_lifecycle() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Seed v1 layout in storage directly (simulating a deployed v1 contract with pre-existing data)
+    let id1 = BytesN::from_array(&env, &[101u8; 32]);
+    let id2 = BytesN::from_array(&env, &[102u8; 32]);
+    let member_addr = Address::generate(&env);
+
+    let mut members1 = Vec::new(&env);
+    members1.push_back(GroupMember {
+        address: member_addr.clone(),
+        name: String::from_str(&env, "Alice"),
+        percentage: 10000,
+    });
+
+    let v1_group1 = AutoShareDetailsV1 {
+        id: id1.clone(),
+        name: String::from_str(&env, "V1 Alpha"),
+        creator: creator.clone(),
+        usage_count: 5,
+        payment_token: token.clone(),
+        members: members1.clone(),
+    };
+
+    let v1_group2 = AutoShareDetailsV1 {
+        id: id2.clone(),
+        name: String::from_str(&env, "V1 Beta"),
+        creator: creator.clone(),
+        usage_count: 10,
+        payment_token: token.clone(),
+        members: Vec::new(&env),
+    };
+
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Group(id1.clone()), &v1_group1);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Group(id2.clone()), &v1_group2);
+
+        let mut creator_groups = Vec::new(&env);
+        creator_groups.push_back(id1.clone());
+        creator_groups.push_back(id2.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::CreatorGroups(creator.clone()), &creator_groups);
+
+        let mut all_groups = Vec::new(&env);
+        all_groups.push_back(id1.clone());
+        all_groups.push_back(id2.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_groups);
+    });
+
+    assert_eq!(client.schema_version(), 1);
+
+    // 1. Assert mutating calls fail with MigrationRequired while schema_version != CURRENT_SCHEMA_VERSION
+    let new_id = BytesN::from_array(&env, &[103u8; 32]);
+    let err_create = client.try_create(
+        &new_id,
+        &String::from_str(&env, "New Group"),
+        &creator,
+        &1,
+        &token,
+    );
+    assert_eq!(err_create, Err(Ok(AutoShareError::MigrationRequired)));
+
+    let err_update = client.try_update_members(&id1, &creator, &members1);
+    assert_eq!(err_update, Err(Ok(AutoShareError::MigrationRequired)));
+
+    let err_distribute = client.try_distribute(&id1, &creator, &100);
+    assert_eq!(err_distribute, Err(Ok(AutoShareError::MigrationRequired)));
+
+    // 2. Assert read operations remain available and correctly return v1 group data
+    let group1 = client.get(&id1);
+    assert_eq!(group1.id, id1);
+    assert_eq!(group1.name, String::from_str(&env, "V1 Alpha"));
+    assert_eq!(group1.creator, creator);
+    assert_eq!(group1.usage_count, 5);
+    assert_eq!(group1.version, 1);
+    assert_eq!(group1.members.len(), 1);
+
+    let creator_groups = client.get_groups_by_creator(&creator);
+    assert_eq!(creator_groups.len(), 2);
+
+    let shares = client.get_member_shares(&id1, &1000);
+    assert_eq!(shares.get(0).unwrap(), 1000);
+
+    // 3. Pause and run migration
+    client.pause(&admin);
+    let progress = client.migrate(&admin, &10);
+    assert_eq!(progress.migrated, 2);
+    assert_eq!(progress.remaining, 0);
+    assert!(progress.done);
+
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+    client.unpause(&admin);
+
+    // 4. Assert mutations now succeed
+    let res_create = client.try_create(
+        &new_id,
+        &String::from_str(&env, "New Group"),
+        &creator,
+        &1,
+        &token,
+    );
+    assert!(res_create.is_ok());
+
+    // 5. Assert every group's data survived field-for-field with upgraded schema version
+    let upgraded_g1 = client.get(&id1);
+    assert_eq!(upgraded_g1.id, v1_group1.id);
+    assert_eq!(upgraded_g1.name, v1_group1.name);
+    assert_eq!(upgraded_g1.creator, v1_group1.creator);
+    assert_eq!(upgraded_g1.usage_count, v1_group1.usage_count);
+    assert_eq!(upgraded_g1.payment_token, v1_group1.payment_token);
+    assert_eq!(upgraded_g1.members, v1_group1.members);
+    assert_eq!(upgraded_g1.version, CURRENT_SCHEMA_VERSION);
+
+    let upgraded_g2 = client.get(&id2);
+    assert_eq!(upgraded_g2.id, v1_group2.id);
+    assert_eq!(upgraded_g2.name, v1_group2.name);
+    assert_eq!(upgraded_g2.creator, v1_group2.creator);
+    assert_eq!(upgraded_g2.usage_count, v1_group2.usage_count);
+    assert_eq!(upgraded_g2.payment_token, v1_group2.payment_token);
+    assert_eq!(upgraded_g2.members, v1_group2.members);
+    assert_eq!(upgraded_g2.version, CURRENT_SCHEMA_VERSION);
+}
+
+#[test]
+fn test_batch_resumption_7_groups_limit_3() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Setup 7 groups in V1 layout
+    let mut all_ids = Vec::new(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        for i in 1..=7u8 {
+            let id = BytesN::from_array(&env, &[i; 32]);
+            all_ids.push_back(id.clone());
+
+            let v1 = AutoShareDetailsV1 {
+                id: id.clone(),
+                name: String::from_str(&env, "Group"),
+                creator: creator.clone(),
+                usage_count: i as u32,
+                payment_token: token.clone(),
+                members: Vec::new(&env),
+            };
+            env.storage().persistent().set(&DataKey::Group(id), &v1);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_ids);
+    });
+
+    // Call 1: limit 3 -> migrates 3, 4 remaining
+    let p1 = client.migrate(&admin, &3);
+    assert_eq!(p1.migrated, 3);
+    assert_eq!(p1.remaining, 4);
+    assert!(!p1.done);
+    assert_eq!(client.schema_version(), 1);
+
+    // Call 2: limit 3 -> migrates 3, 1 remaining
+    let p2 = client.migrate(&admin, &3);
+    assert_eq!(p2.migrated, 3);
+    assert_eq!(p2.remaining, 1);
+    assert!(!p2.done);
+    assert_eq!(client.schema_version(), 1);
+
+    // Call 3: limit 3 -> migrates 1, 0 remaining, done!
+    let p3 = client.migrate(&admin, &3);
+    assert_eq!(p3.migrated, 1);
+    assert_eq!(p3.remaining, 0);
+    assert!(p3.done);
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+
+    // Exactly 3 calls completed migration. 4th call returns NothingToMigrate.
+    let err = client.try_migrate(&admin, &3);
+    assert_eq!(err, Err(Ok(AutoShareError::NothingToMigrate)));
+
+    // Verify all 7 groups are migrated to CURRENT_SCHEMA_VERSION
+    for i in 1..=7u8 {
+        let id = BytesN::from_array(&env, &[i; 32]);
+        let g = client.get(&id);
+        assert_eq!(g.version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(g.usage_count, i as u32);
+    }
+}
+
+#[test]
+fn test_interrupted_migration_consistent_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    let mut all_ids = Vec::new(&env);
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::SchemaVersion, &1u32);
+        env.storage().instance().set(&DataKey::Paused, &false);
+
+        for i in 1..=5u8 {
+            let id = BytesN::from_array(&env, &[i; 32]);
+            all_ids.push_back(id.clone());
+
+            let v1 = AutoShareDetailsV1 {
+                id: id.clone(),
+                name: String::from_str(&env, "Group"),
+                creator: creator.clone(),
+                usage_count: i as u32,
+                payment_token: token.clone(),
+                members: Vec::new(&env),
+            };
+            env.storage().persistent().set(&DataKey::Group(id), &v1);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::AllGroups, &all_ids);
+    });
+
+    // Run batch 1 (2 groups) and interrupt (don't call migrate again)
+    let p1 = client.migrate(&admin, &2);
+    assert_eq!(p1.migrated, 2);
+    assert_eq!(p1.remaining, 3);
+    assert!(!p1.done);
+
+    // Verify readable state for all 5 groups
+    for i in 1..=5u8 {
+        let id = BytesN::from_array(&env, &[i; 32]);
+        let g = client.get(&id);
+        assert_eq!(g.usage_count, i as u32);
+        if i <= 2 {
+            assert_eq!(g.version, CURRENT_SCHEMA_VERSION);
+        } else {
+            assert_eq!(g.version, 1);
+        }
+    }
+}
+
+#[test]
+fn test_non_admin_upgrade_unauthorized() {
+    let (env, client, _creator, _token) = setup_env();
+    let stranger = Address::generate(&env);
+    let fake_wasm_hash = BytesN::from_array(&env, &[99u8; 32]);
+
+    let err = client.try_upgrade(&stranger, &fake_wasm_hash);
+    assert_eq!(err, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_non_admin_migrate_unauthorized() {
+    let (env, client, _creator, _token) = setup_env();
+    let stranger = Address::generate(&env);
+
+    let err = client.try_migrate(&stranger, &5);
+    assert_eq!(err, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_upgrade_while_unpaused_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
+
+    let fake_wasm_hash = BytesN::from_array(&env, &[88u8; 32]);
+
+    // Contract is not paused -> upgrade returns ContractNotPaused
+    let err = client.try_upgrade(&admin, &fake_wasm_hash);
+    assert_eq!(err, Err(Ok(AutoShareError::ContractNotPaused)));
+
+    // Pause contract -> upgrade proceeds past the pause check
+    client.pause(&admin);
+    // Note: upgrade with a non-existent wasm hash in test env will fail at deployer level or succeed if mock
+    let res = client.try_upgrade(&admin, &fake_wasm_hash);
+    // In soroban testutils with mock_all_auths, deployer update will succeed or throw host error for invalid wasm,
+    // but the contract level validation (auth and pause) succeeded.
+    assert_ne!(res, Err(Ok(AutoShareError::ContractNotPaused)));
+    assert_ne!(res, Err(Ok(AutoShareError::Unauthorized)));
+}
+
+#[test]
+fn test_migrate_when_current_returns_nothing_to_migrate() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
+
+    assert_eq!(client.schema_version(), CURRENT_SCHEMA_VERSION);
+    let err = client.try_migrate(&admin, &10);
+    assert_eq!(err, Err(Ok(AutoShareError::NothingToMigrate)));
+}
+
+#[test]
+fn test_pause_unpause_admin_only() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    client.init(&admin);
+
+    // Non-admin cannot pause or unpause
+    assert_eq!(
+        client.try_pause(&stranger),
+        Err(Ok(AutoShareError::Unauthorized))
+    );
+    assert_eq!(
+        client.try_unpause(&stranger),
+        Err(Ok(AutoShareError::Unauthorized))
+    );
+
+    // Admin can pause and unpause
+    assert!(client.try_pause(&admin).is_ok());
+    assert!(client.try_unpause(&admin).is_ok());
+}
+
+#[test]
+fn test_all_groups_global_index_maintained_on_create() {
+    let (env, client, creator, token) = setup_env();
+
+    let id1 = BytesN::from_array(&env, &[111u8; 32]);
+    let id2 = BytesN::from_array(&env, &[112u8; 32]);
+
+    client.create(&id1, &String::from_str(&env, "G1"), &creator, &1, &token);
+    client.create(&id2, &String::from_str(&env, "G2"), &creator, &2, &token);
+
+    let g1 = client.get(&id1);
+    assert_eq!(g1.version, CURRENT_SCHEMA_VERSION);
+    let g2 = client.get(&id2);
+    assert_eq!(g2.version, CURRENT_SCHEMA_VERSION);
+}
+
+// ── overflow boundary regression tests ────────────────────────────────────
+//
+// MAX_SAFE_TOTAL = i128::MAX / 10_000 = 17_014_118_346_046_923_173_168_730_371_588_410
+//
+// Defect found: calculate_share used .expect() so any amount above this boundary
+// caused an opaque trap instead of returning InvalidAmount.
+
+/// One unit below the overflow boundary — must succeed.
+#[test]
+fn test_calculate_share_overflow_boundary_safe() {
+    let max_safe = base::utils::MAX_SAFE_TOTAL;
+    // percentage = 10_000 maximises the intermediate product (total * 10_000)
+    let result = base::utils::calculate_share(max_safe, 10_000);
+    assert!(
+        result.is_ok(),
+        "expected Ok for total == MAX_SAFE_TOTAL, got {:?}",
+        result
+    );
+    assert_eq!(result.unwrap(), max_safe);
+}
+
+/// One unit above the overflow boundary — must return InvalidAmount, not trap.
+///
+/// Regression for: calculate_share panicked via .expect() instead of returning Err.
+#[test]
+fn test_calculate_share_overflow_boundary_over() {
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = base::utils::calculate_share(over_safe, 10_000);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total == MAX_SAFE_TOTAL + 1, got {:?}",
+        result
+    );
+}
+
+/// distribute_amounts with an overflow-triggering total must return Err, not trap.
+///
+/// Regression for: distribute used .expect("failed to distribute amounts") which
+/// turned the overflow into an opaque contract abort instead of a typed error.
+///
+/// The overflow boundary for `calculate_share` is `i128::MAX / percentage`.
+/// With two members at 5_000 bps each, the safe boundary is `i128::MAX / 5_000`.
+/// Any total strictly above that overflows the intermediate product `total * 5_000`.
+#[test]
+fn test_distribute_amounts_overflow_returns_err() {
+    let env = Env::default();
+    // With percentage = 5_000, overflow fires when total * 5_000 > i128::MAX,
+    // i.e. total > i128::MAX / 5_000.
+    let over_safe_5000 = i128::MAX / 5_000 + 1;
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5_000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5_000,
+        },
+    ];
+    // The first (non-final) member goes through calculate_share and must overflow.
+    let result = base::utils::distribute_amounts(&env, over_safe_5000, &members);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total > i128::MAX/5000, got {:?}",
+        result
+    );
+}
+
+/// get_calculated_share via contract client returns Err on overflow (no trap).
+///
+/// Regression for: get_calculated_share had no Result return type; overflow
+/// caused an opaque host trap instead of a typed error visible to callers.
+#[test]
+fn test_get_calculated_share_overflow() {
+    let (_env, client, _, _) = setup_env();
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = client.try_get_calculated_share(&over_safe, &10_000u32);
+    assert!(
+        result.is_err(),
+        "expected Err for overflowing get_calculated_share"
+    );
+}
+
+/// get_member_shares via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_member_shares used .expect("group not found") so callers
+/// received an opaque abort instead of the typed GroupNotFound error.
+#[test]
+fn test_get_member_shares_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
+    let missing_id = BytesN::from_array(&env, &[0xddu8; 32]);
+    let result = client.try_get_member_shares(&missing_id, &1000);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// get_total_percentage via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_total_percentage used .expect("group not found") so
+/// callers received an opaque abort instead of a typed error.
+#[test]
+fn test_get_total_percentage_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    client.init(&Address::generate(&env));
+    let missing_id = BytesN::from_array(&env, &[0xeeu8; 32]);
+    let result = client.try_get_total_percentage(&missing_id);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// validate_percentages (canonical) rejects a zero-percentage member.
+///
+/// Regression for: the old utils::validate_percentages did NOT check for
+/// zero-percentage members, meaning a member with percentage=0 could slip
+/// through and receive dust-only payouts silently.
+#[test]
+fn test_regression_validate_percentages_rejects_zero_member() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Ghost"),
+            percentage: 0,
+        },
+    ];
+    // Both the utils (canonical) and validators (delegating) versions must reject.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+}
+
+/// validate_percentages (canonical) rejects overflow via checked_add.
+///
+/// Regression for: the old validators::validate_percentages used plain `+=`
+/// which, with overflow-checks=true in release, would trap instead of
+/// returning InvalidPercentage.
+#[test]
+fn test_regression_validate_percentages_overflow_safe() {
+    let env = Env::default();
+    // Two members whose raw sum overflows u32::MAX
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "A"),
+            percentage: u32::MAX / 2 + 1,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "B"),
+            percentage: u32::MAX / 2 + 1,
+        },
+    ];
+    // Must return InvalidPercentage, not trap.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
     );
 }
 

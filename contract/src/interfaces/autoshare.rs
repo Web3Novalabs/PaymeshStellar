@@ -68,6 +68,27 @@ pub trait AutoShareTrait {
     /// Returns the sum of a group's member percentages in basis points.
     fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32;
 
+    /// Replaces the contract WASM with a new version.
+    ///
+    /// Admin-gated. The contract **must** be paused before upgrading. Emits
+    /// an `("autoshare", "upgraded")` event on success.
+    fn upgrade(env: Env, caller: Address, new_wasm_hash: BytesN<32>) -> Result<(), AutoShareError>;
+
+    /// Migrates up to `limit` groups from the old schema to the current one.
+    ///
+    /// Admin-gated. Returns [`MigrationProgress`] with the number of groups
+    /// migrated, remaining, and whether the job is done. When done, stamps the
+    /// schema version to [`crate::base::types::CURRENT_SCHEMA_VERSION`].
+    fn migrate(env: Env, caller: Address, limit: u32) -> Result<MigrationProgress, AutoShareError>;
+
+    /// Returns the contract's stored schema version (0 if never initialized).
+    fn schema_version(env: Env) -> u32;
+
+    /// Pauses the contract. Admin-gated.
+    fn pause(env: Env, caller: Address) -> Result<(), AutoShareError>;
+
+    /// Unpauses the contract. Admin-gated.
+    fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError>;
     /// Takes custody of `amount` and credits it to the group's current members.
     ///
     /// The escrow counterpart to [`Self::distribute`]: one transfer in, and each

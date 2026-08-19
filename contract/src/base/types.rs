@@ -82,6 +82,19 @@ pub enum DataKey {
     CreatorGroups(Address),
     /// Stores the contract admin address for administrative operations.
     Admin,
+    /// Current schema version (instance storage, read on nearly every call).
+    SchemaVersion,
+    /// Global ordered list of all group IDs (persistent storage).
+    ///
+    /// Each entry is a `BytesN<32>` (32 bytes). At ~2,000 groups the Vec
+    /// approaches Soroban's 64 KB persistent-entry limit. For deployments
+    /// expecting more groups, paginate into `AllGroupsPage(u32)` buckets.
+    AllGroups,
+    /// Cursor index into [`DataKey::AllGroups`] for resumable batched migration
+    /// (instance storage). Removed once migration completes.
+    MigrationCursor,
+    /// Whether the contract is paused (instance storage).
+    Paused,
     /// Maps `(group id, member address)` to that member's unclaimed escrow balance.
     ///
     /// Credited by `deposit` and removed by `claim`. Keying on the address rather
