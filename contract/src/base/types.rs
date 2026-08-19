@@ -3,6 +3,11 @@
 
 use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
 
+/// Current schema version. Bumped on every storage-layout change.
+/// v1 = implicit pre-versioning layout (no `version` field on groups).
+/// v2 = adds `version: u32` to `AutoShareDetails`.
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
 /// A recipient and their configured share of a group distribution.
@@ -17,8 +22,11 @@ pub struct GroupMember {
 
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
-/// Complete persisted configuration for an AutoShare group.
-pub struct AutoShareDetails {
+/// Legacy v1 group layout **without** a `version` field.
+///
+/// Used exclusively during migration to deserialize records written by the
+/// pre-versioning contract code.
+pub struct AutoShareDetailsV1 {
     /// Unique 32-byte group identifier.
     pub id: BytesN<32>,
     /// Human-readable group name.
@@ -34,7 +42,39 @@ pub struct AutoShareDetails {
 }
 
 #[contracttype]
-/// Keys used by the contract's persistent storage.
+#[derive(Debug, PartialEq, Clone)]
+/// Complete persisted configuration for an AutoShare group (v2+).
+pub struct AutoShareDetails {
+    /// Unique 32-byte group identifier.
+    pub id: BytesN<32>,
+    /// Human-readable group name.
+    pub name: String,
+    /// Address authorized to update the member list.
+    pub creator: Address,
+    /// Application-defined usage counter stored with the group.
+    pub usage_count: u32,
+    /// Token contract used for group distributions.
+    pub payment_token: Address,
+    /// Ordered recipients and their basis-point shares.
+    pub members: Vec<GroupMember>,
+    /// Schema version this record was written with.
+    pub version: u32,
+}
+
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+/// Result of a single `migrate` batch call.
+pub struct MigrationProgress {
+    /// Number of groups migrated in this batch.
+    pub migrated: u32,
+    /// Number of groups still awaiting migration.
+    pub remaining: u32,
+    /// `true` when all groups have been migrated.
+    pub done: bool,
+}
+
+#[contracttype]
+/// Keys used by the contract's persistent and instance storage.
 pub enum DataKey {
     /// Maps a group identifier to its [`AutoShareDetails`].
     Group(BytesN<32>),

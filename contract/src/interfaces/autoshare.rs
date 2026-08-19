@@ -3,10 +3,17 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember};
+use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress};
 
 /// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
+    /// One-time contract initialization.
+    ///
+    /// Sets the admin, stamps the schema version, and initializes the paused
+    /// flag to `false`. Returns [`AutoShareError::AlreadyInitialized`] on
+    /// repeated calls.
+    fn init(env: Env, admin: Address) -> Result<(), AutoShareError>;
+
     /// Creates an empty group and indexes it by creator.
     ///
     /// The creator must authorize the call. Returns
