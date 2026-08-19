@@ -14,8 +14,8 @@ use soroban_sdk::{Env, Vec};
 pub fn calculate_share(total: i128, percentage: u32) -> i128 {
     total
         .checked_mul(percentage as i128)
-        .expect("overflow in calculate_share")
-        / 10000
+        .ok_or(AutoShareError::InvalidAmount)?;
+    Ok(product / 10_000)
 }
 
 /// Validates that member percentages total exactly `10_000` basis points.
@@ -27,11 +27,14 @@ pub fn calculate_share(total: i128, percentage: u32) -> i128 {
 pub fn validate_percentages(members: &Vec<GroupMember>) -> Result<(), AutoShareError> {
     let mut sum: u32 = 0;
     for member in members.iter() {
+        if member.percentage == 0 {
+            return Err(AutoShareError::InvalidPercentage);
+        }
         sum = sum
             .checked_add(member.percentage)
             .ok_or(AutoShareError::InvalidPercentage)?;
     }
-    if sum == 10000 {
+    if sum == 10_000 {
         Ok(())
     } else {
         Err(AutoShareError::InvalidPercentage)
@@ -65,10 +68,10 @@ pub fn distribute_amounts(
     for i in 0..len {
         let member = members.get(i).unwrap();
         let share = if i == len - 1 {
-            // The last member explicitly gets the remaining dust to ensure payouts sum exactly to the total.
+            // The last member gets the remaining dust so payouts sum exactly to total.
             total - distributed
         } else {
-            calculate_share(total, member.percentage)
+            calculate_share(total, member.percentage)?
         };
         shares.push_back(share);
         distributed += share;

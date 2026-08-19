@@ -277,7 +277,16 @@ fn test_get_groups_by_creator_returns_empty_for_unknown() {
 
 #[test]
 fn test_distribute_zero_amount() {
-    let (env, client, creator, token) = setup_env();
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[20u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
     let result = client.try_distribute(&id, &creator, &0);
@@ -286,7 +295,16 @@ fn test_distribute_zero_amount() {
 
 #[test]
 fn test_distribute_negative_amount() {
-    let (env, client, creator, token) = setup_env();
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
     let id = BytesN::from_array(&env, &[21u8; 32]);
     client.create(&id, &String::from_str(&env, "G"), &creator, &1, &token);
     let result = client.try_distribute(&id, &creator, &-500);
@@ -307,7 +325,176 @@ fn test_distribute_insufficient_balance() {
 
     // Mint only 50, but try to distribute 1000
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
-    token_admin.mint(&creator, &50);
+    token_admin.mint(&creator, &1000);
+
+    let percentages = [10000u32; 1].to_vec();
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
+
+    let result = client.try_distribute(&id, &creator, &10000);
+    assert!(result.is_err());
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&members.get(0).unwrap()), 0);
+}
+
+#[test]
+fn test_distribute_empty_members() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let id = BytesN::from_array(&env, &[22u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "G"),
+        &creator,
+        &1,
+        &token_address,
+    );
+
+    // Don't add any members - group has empty members list
+    let result = client.try_distribute(&id, &creator, &1000);
+    assert!(result.is_err());
+}
+
+#[test]
+#[should_panic]
+fn test_distribute_requires_auth() {
+    let env = Env::default();
+    // Do NOT mock_all_auths - this tests actual auth requirement
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &1000);
+
+    let (id, _members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 28, &[6000, 4000]);
+
+    // Unauthorized calls panic in Soroban's auth host rather than returning Err,
+    // so we assert on the panic itself instead of unwrapping a Result.
+    // This call panics because auth was never mocked/authorized.
+    // #[should_panic] on the test asserts that this panic is expected.
+    client.distribute(&id, &creator, &1000);
+}
+
+#[test]
+fn test_distribute_single_member() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &12345);
+
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 23, &[10000]);
+
+    client.distribute(&id, &creator, &12345);
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&members.get(0).unwrap()), 12345);
+}
+
+#[test]
+fn test_distribute_three_members_uneven_split() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &1000);
+
+    // 10%, 20%, 70%
+    let (id, members) = setup_group_with_members(
+        &env,
+        &client,
+        &creator,
+        &token_address,
+        24,
+        &[1000, 2000, 7000],
+    );
+
+    client.distribute(&id, &creator, &1000);
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&members.get(0).unwrap()), 100);
+    assert_eq!(token_client.balance(&members.get(1).unwrap()), 200);
+    assert_eq!(token_client.balance(&members.get(2).unwrap()), 700);
+    assert_eq!(100 + 200 + 700, 1000);
+}
+
+#[test]
+fn test_distribute_many_members() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &100000);
+
+    // 10 members, each 10%
+    let percentages = [1000u32; 10].to_vec();
+    let (id, members) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 25, &percentages);
+
+    client.distribute(&id, &creator, &100000);
+
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+    let mut total = 0;
+    for i in 0..10 {
+        let balance = token_client.balance(&members.get(i).unwrap());
+        assert_eq!(balance, 10000);
+        total += balance;
+    }
+    assert_eq!(total, 100000);
+}
+
+#[test]
+fn test_distribute_large_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_id = env.register_stellar_asset_contract_v2(Address::generate(&env));
+    let token_address = token_id.address();
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    let large_amount: i128 = 1_000_000_000_000_000_000;
+    token_admin.mint(&creator, &large_amount);
 
     let (id, _) =
         setup_group_with_members(&env, &client, &creator, &token_address, 30, &[5000, 5000]);
@@ -1150,4 +1337,191 @@ fn test_all_groups_global_index_maintained_on_create() {
     assert_eq!(g1.version, CURRENT_SCHEMA_VERSION);
     let g2 = client.get(&id2);
     assert_eq!(g2.version, CURRENT_SCHEMA_VERSION);
+}
+
+// ── overflow boundary regression tests ────────────────────────────────────
+//
+// MAX_SAFE_TOTAL = i128::MAX / 10_000 = 17_014_118_346_046_923_173_168_730_371_588_410
+//
+// Defect found: calculate_share used .expect() so any amount above this boundary
+// caused an opaque trap instead of returning InvalidAmount.
+
+/// One unit below the overflow boundary — must succeed.
+#[test]
+fn test_calculate_share_overflow_boundary_safe() {
+    let max_safe = base::utils::MAX_SAFE_TOTAL;
+    // percentage = 10_000 maximises the intermediate product (total * 10_000)
+    let result = base::utils::calculate_share(max_safe, 10_000);
+    assert!(
+        result.is_ok(),
+        "expected Ok for total == MAX_SAFE_TOTAL, got {:?}",
+        result
+    );
+    assert_eq!(result.unwrap(), max_safe);
+}
+
+/// One unit above the overflow boundary — must return InvalidAmount, not trap.
+///
+/// Regression for: calculate_share panicked via .expect() instead of returning Err.
+#[test]
+fn test_calculate_share_overflow_boundary_over() {
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = base::utils::calculate_share(over_safe, 10_000);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total == MAX_SAFE_TOTAL + 1, got {:?}",
+        result
+    );
+}
+
+/// distribute_amounts with an overflow-triggering total must return Err, not trap.
+///
+/// Regression for: distribute used .expect("failed to distribute amounts") which
+/// turned the overflow into an opaque contract abort instead of a typed error.
+///
+/// The overflow boundary for `calculate_share` is `i128::MAX / percentage`.
+/// With two members at 5_000 bps each, the safe boundary is `i128::MAX / 5_000`.
+/// Any total strictly above that overflows the intermediate product `total * 5_000`.
+#[test]
+fn test_distribute_amounts_overflow_returns_err() {
+    let env = Env::default();
+    // With percentage = 5_000, overflow fires when total * 5_000 > i128::MAX,
+    // i.e. total > i128::MAX / 5_000.
+    let over_safe_5000 = i128::MAX / 5_000 + 1;
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5_000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Bob"),
+            percentage: 5_000,
+        },
+    ];
+    // The first (non-final) member goes through calculate_share and must overflow.
+    let result = base::utils::distribute_amounts(&env, over_safe_5000, &members);
+    assert_eq!(
+        result,
+        Err(base::errors::AutoShareError::InvalidAmount),
+        "expected InvalidAmount for total > i128::MAX/5000, got {:?}",
+        result
+    );
+}
+
+/// get_calculated_share via contract client returns Err on overflow (no trap).
+///
+/// Regression for: get_calculated_share had no Result return type; overflow
+/// caused an opaque host trap instead of a typed error visible to callers.
+#[test]
+fn test_get_calculated_share_overflow() {
+    let (_env, client, _, _) = setup_env();
+    let over_safe = base::utils::MAX_SAFE_TOTAL + 1;
+    let result = client.try_get_calculated_share(&over_safe, &10_000u32);
+    assert!(
+        result.is_err(),
+        "expected Err for overflowing get_calculated_share"
+    );
+}
+
+/// get_member_shares via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_member_shares used .expect("group not found") so callers
+/// received an opaque abort instead of the typed GroupNotFound error.
+#[test]
+fn test_get_member_shares_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let missing_id = BytesN::from_array(&env, &[0xddu8; 32]);
+    let result = client.try_get_member_shares(&missing_id, &1000);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// get_total_percentage via contract client returns GroupNotFound, not a trap.
+///
+/// Regression for: get_total_percentage used .expect("group not found") so
+/// callers received an opaque abort instead of a typed error.
+#[test]
+fn test_get_total_percentage_group_not_found() {
+    let (env, _, _, _) = setup_env();
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let missing_id = BytesN::from_array(&env, &[0xeeu8; 32]);
+    let result = client.try_get_total_percentage(&missing_id);
+    assert!(
+        result.is_err(),
+        "expected Err(GroupNotFound) for missing group"
+    );
+}
+
+/// validate_percentages (canonical) rejects a zero-percentage member.
+///
+/// Regression for: the old utils::validate_percentages did NOT check for
+/// zero-percentage members, meaning a member with percentage=0 could slip
+/// through and receive dust-only payouts silently.
+#[test]
+fn test_regression_validate_percentages_rejects_zero_member() {
+    let env = Env::default();
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Ghost"),
+            percentage: 0,
+        },
+    ];
+    // Both the utils (canonical) and validators (delegating) versions must reject.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+}
+
+/// validate_percentages (canonical) rejects overflow via checked_add.
+///
+/// Regression for: the old validators::validate_percentages used plain `+=`
+/// which, with overflow-checks=true in release, would trap instead of
+/// returning InvalidPercentage.
+#[test]
+fn test_regression_validate_percentages_overflow_safe() {
+    let env = Env::default();
+    // Two members whose raw sum overflows u32::MAX
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "A"),
+            percentage: u32::MAX / 2 + 1,
+        },
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "B"),
+            percentage: u32::MAX / 2 + 1,
+        },
+    ];
+    // Must return InvalidPercentage, not trap.
+    assert_eq!(
+        base::utils::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
+    assert_eq!(
+        base::validators::validate_percentages(&members),
+        Err(base::errors::AutoShareError::InvalidPercentage)
+    );
 }

@@ -13,6 +13,8 @@ use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String, V
 pub mod base;
 /// Public contract interface definitions.
 pub mod interfaces;
+#[cfg(test)]
+mod prop_tests;
 mod test;
 
 use base::auth::{
