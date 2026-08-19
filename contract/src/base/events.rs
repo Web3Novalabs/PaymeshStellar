@@ -56,3 +56,26 @@ pub fn paused(env: &Env) {
 pub fn unpaused(env: &Env) {
     env.events().publish(("autoshare", "unpaused"), ());
 }
+
+/// Publishes an `("autoshare", "escrow_deposited")` event.
+///
+/// Topics are `"autoshare"` and `"escrow_deposited"`. The payload is
+/// `(id, from, amount)`, where `amount` is the total taken into custody.
+pub fn escrow_deposited(env: &Env, id: &BytesN<32>, from: &Address, amount: i128) {
+    env.events().publish(
+        ("autoshare", "escrow_deposited"),
+        (id.clone(), from.clone(), amount),
+    );
+}
+
+/// Publishes an `("autoshare", "escrow_claimed")` event.
+///
+/// Topics are `"autoshare"` and `"escrow_claimed"`. The payload is
+/// `(id, member, to, amount)`, where `member` is the credited address and `to`
+/// is the address the tokens were sent to.
+pub fn escrow_claimed(env: &Env, id: &BytesN<32>, member: &Address, to: &Address, amount: i128) {
+    env.events().publish(
+        ("autoshare", "escrow_claimed"),
+        (id.clone(), member.clone(), to.clone(), amount),
+    );
+}

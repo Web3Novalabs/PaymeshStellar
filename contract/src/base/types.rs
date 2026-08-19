@@ -95,4 +95,14 @@ pub enum DataKey {
     MigrationCursor,
     /// Whether the contract is paused (instance storage).
     Paused,
+    /// Maps `(group id, member address)` to that member's unclaimed escrow balance.
+    ///
+    /// Credited by `deposit` and removed by `claim`. Keying on the address rather
+    /// than on a member-list position is what gives escrow its snapshot
+    /// semantics: replacing a group's members never moves credited funds.
+    Claimable(BytesN<32>, Address),
+    /// Maps a group identifier to the total escrow balance held for it.
+    ///
+    /// Always equal to the sum of that group's [`DataKey::Claimable`] entries.
+    Escrowed(BytesN<32>),
 }

@@ -4,15 +4,23 @@ use crate::base::errors::AutoShareError;
 use crate::base::types::GroupMember;
 use soroban_sdk::{Env, Vec};
 
+/// Largest `total` that cannot overflow [`calculate_share`] at any percentage.
+///
+/// The intermediate product is `total * percentage`, maximised at the
+/// `10_000` basis-point ceiling, so anything at or below `i128::MAX / 10_000`
+/// is safe and anything above it is rejected.
+pub const MAX_SAFE_TOTAL: i128 = i128::MAX / 10_000;
+
 /// Calculates a member share as `total * percentage / 10_000`.
 ///
 /// `percentage` is expressed in basis points, where `10_000` equals 100%.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the intermediate multiplication overflows `i128`.
-pub fn calculate_share(total: i128, percentage: u32) -> i128 {
-    total
+/// Returns [`AutoShareError::InvalidAmount`] when the intermediate
+/// multiplication would overflow `i128` — see [`MAX_SAFE_TOTAL`].
+pub fn calculate_share(total: i128, percentage: u32) -> Result<i128, AutoShareError> {
+    let product = total
         .checked_mul(percentage as i128)
         .ok_or(AutoShareError::InvalidAmount)?;
     Ok(product / 10_000)
