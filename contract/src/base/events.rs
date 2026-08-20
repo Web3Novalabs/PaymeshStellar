@@ -57,6 +57,26 @@ pub fn unpaused(env: &Env) {
     env.events().publish(("autoshare", "unpaused"), ());
 }
 
+/// Publishes an `("autoshare", "initialized")` event.
+pub fn initialized(env: &Env, admin: &Address) {
+    env.events()
+        .publish(("autoshare", "initialized"), admin.clone());
+}
+
+/// Publishes an `("autoshare", "admin_proposed")` event.
+pub fn admin_proposed(env: &Env, new_admin: &Address) {
+    env.events()
+        .publish(("autoshare", "admin_proposed"), new_admin.clone());
+}
+
+/// Publishes an `("autoshare", "admin_transferred")` event.
+pub fn admin_transferred(env: &Env, old_admin: &Address, new_admin: &Address) {
+    env.events().publish(
+        ("autoshare", "admin_transferred"),
+        (old_admin.clone(), new_admin.clone()),
+    );
+}
+
 /// Publishes an `("autoshare", "escrow_deposited")` event.
 ///
 /// Topics are `"autoshare"` and `"escrow_deposited"`. The payload is

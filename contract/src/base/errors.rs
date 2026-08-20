@@ -42,6 +42,12 @@ pub enum AutoShareError {
     /// Appended at 16: 12 through 15 were taken by the upgradeability work, and
     /// discriminants are ABI, so nothing already deployed may be renumbered.
     NothingToClaim = 16,
+    /// The contract has not been initialized.
+    NotInitialized = 17,
+    /// The contract is paused.
+    ContractPaused = 18,
+    /// No pending admin to accept.
+    NoPendingAdmin = 19,
 }
 
 impl AutoShareError {
@@ -91,6 +97,15 @@ impl AutoShareError {
             }
             AutoShareError::NothingToClaim => {
                 "Nothing to claim. This member has no escrowed balance in this group."
+            }
+            AutoShareError::NotInitialized => {
+                "Not initialized. The contract admin has not been set."
+            }
+            AutoShareError::ContractPaused => {
+                "Contract paused. This operation is unavailable while paused."
+            }
+            AutoShareError::NoPendingAdmin => {
+                "No pending admin. There is no active admin proposal to accept."
             }
         }
     }

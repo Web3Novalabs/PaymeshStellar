@@ -15,11 +15,15 @@ pub mod base;
 pub mod interfaces;
 #[cfg(test)]
 mod prop_tests;
+#[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_admin;
 
 use base::auth::{
-    require_admin, require_group_creator, require_migration_current, require_paused,
-    validate_amount, validate_group_exists, validate_members_unique, validate_percentages,
+    require_admin, require_group_creator, require_migration_current, require_not_paused,
+    require_paused, validate_amount, validate_group_exists, validate_members_unique,
+    validate_percentages,
 };
 use base::errors::AutoShareError;
 use base::events;
@@ -55,12 +59,55 @@ mod contract_impl {
                 return Err(AutoShareError::AlreadyInitialized);
             }
 
+            admin.require_auth();
+
             env.storage().instance().set(&DataKey::Admin, &admin);
             env.storage()
                 .instance()
                 .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
             env.storage().instance().set(&DataKey::Paused, &false);
 
+            events::initialized(&env, &admin);
+            Ok(())
+        }
+
+        fn propose_admin(
+            env: Env,
+            caller: Address,
+            new_admin: Address,
+        ) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage()
+                .instance()
+                .set(&DataKey::PendingAdmin, &new_admin);
+            events::admin_proposed(&env, &new_admin);
+            Ok(())
+        }
+
+        fn accept_admin(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            caller.require_auth();
+            let pending_admin: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::PendingAdmin)
+                .ok_or(AutoShareError::NoPendingAdmin)?;
+
+            if pending_admin != caller {
+                return Err(AutoShareError::Unauthorized);
+            }
+
+            let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+
+            env.storage().instance().set(&DataKey::Admin, &caller);
+            env.storage().instance().remove(&DataKey::PendingAdmin);
+
+            events::admin_transferred(&env, &old_admin, &caller);
+            Ok(())
+        }
+
+        fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().remove(&DataKey::PendingAdmin);
             Ok(())
         }
 
@@ -94,6 +141,7 @@ mod contract_impl {
             usage_count: u32,
             payment_token: Address,
         ) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
             require_migration_current(&env)?;
             creator.require_auth();
 
@@ -167,6 +215,7 @@ mod contract_impl {
             caller: Address,
             new_members: Vec<GroupMember>,
         ) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
             require_migration_current(&env)?;
 
             let mut details = validate_group_exists(&env, &id)?;
@@ -246,6 +295,7 @@ mod contract_impl {
             from: Address,
             amount: i128,
         ) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
             require_migration_current(&env)?;
             from.require_auth();
 
@@ -547,6 +597,7 @@ mod contract_impl {
             from: Address,
             amount: i128,
         ) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
             base::escrow::deposit(&env, &id, &from, amount)
         }
 
@@ -568,6 +619,7 @@ mod contract_impl {
         ///
         /// Soroban aborts if `member` does not authorize the call.
         fn claim(env: Env, id: BytesN<32>, member: Address) -> Result<i128, AutoShareError> {
+            require_not_paused(&env)?;
             base::escrow::claim(&env, &id, &member)
         }
 
@@ -589,6 +641,7 @@ mod contract_impl {
             member: Address,
             to: Address,
         ) -> Result<i128, AutoShareError> {
+            require_not_paused(&env)?;
             base::escrow::claim_to(&env, &id, &member, &to)
         }
 

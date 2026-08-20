@@ -173,8 +173,8 @@ pub fn require_group_member(
 ///
 /// # Errors
 ///
-/// Returns [`AutoShareError::Unauthorized`] when no admin has been set or
-/// when `caller` is not the admin.
+/// Returns [`AutoShareError::NotInitialized`] when no admin has been set or
+/// [`AutoShareError::Unauthorized`] when `caller` is not the admin.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> {
     caller.require_auth();
 
@@ -183,7 +183,7 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> 
         .instance()
         .get(&DataKey::Admin)
         .or_else(|| env.storage().persistent().get(&DataKey::Admin))
-        .ok_or(AutoShareError::Unauthorized)?;
+        .ok_or(AutoShareError::NotInitialized)?;
 
     if admin == *caller {
         Ok(())
@@ -238,5 +238,24 @@ pub fn require_paused(env: &Env) -> Result<(), AutoShareError> {
         Ok(())
     } else {
         Err(AutoShareError::ContractNotPaused)
+    }
+}
+
+/// Checks that the contract is not paused.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::ContractPaused`] when the contract is paused.
+pub fn require_not_paused(env: &Env) -> Result<(), AutoShareError> {
+    let paused: bool = env
+        .storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false);
+
+    if paused {
+        Err(AutoShareError::ContractPaused)
+    } else {
+        Ok(())
     }
 }
