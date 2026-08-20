@@ -1,27 +1,10 @@
 import { Response, Router } from 'express';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth.js';
 import { usersService, User } from '../services/users.js';
+import { validate } from '../middleware/validate.js';
+import { CreateUserSchema, UpdateUserSchema, GetUserSchema } from '../schemas/userSchemas.js';
 
 const router: Router = Router();
-
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email);
-}
-
-interface CreateUserRequest {
-  name: string;
-  email?: string;
-  [key: string]: unknown;
-}
-
-interface UpdateUserRequest {
-  name?: string;
-  email?: string;
-  [key: string]: unknown;
-}
 
 interface UserResponse {
   id: string;
@@ -60,9 +43,10 @@ function userToResponse(user: User): UserResponse {
 router.post(
   '/',
   requireAuth,
+  validate(CreateUserSchema),
   async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
     const address = req.user?.publicKey;
-    const body = req.body as CreateUserRequest;
+    const { name, email } = req.body;
 
     if (!address) {
       return res.status(401).json({
@@ -72,44 +56,6 @@ router.post(
           message: 'Authentication required.',
         },
       });
-    }
-
-    // Check for extra fields
-    const allowedFields = new Set(['name', 'email']);
-    const bodyKeys = Object.keys(body);
-    const extraFields = bodyKeys.filter((key) => !allowedFields.has(key));
-    if (extraFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message: `Unknown fields: ${extraFields.join(', ')}`,
-        },
-      });
-    }
-
-    // Validate name
-    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message: 'Field "name" is required and must be a non-empty string.',
-        },
-      });
-    }
-
-    // Validate email if provided
-    if (body.email !== undefined) {
-      if (typeof body.email !== 'string' || !isValidEmail(body.email)) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Field "email" must be a valid RFC email address.',
-          },
-        });
-      }
     }
 
     // Check if user already exists for this address
@@ -127,8 +73,8 @@ router.post(
     try {
       const user = await usersService.create({
         address,
-        name: body.name.trim(),
-        email: body.email?.trim(),
+        name: name.trim(),
+        email: email?.trim(),
       });
 
       return res.status(201).json({
@@ -201,18 +147,8 @@ router.get(
  * GET /api/users/:id
  * Retrieve a user profile by ID.
  */
-router.get('/:id', async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
+router.get('/:id', validate(GetUserSchema), async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
   const { id } = req.params;
-
-  if (!id) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'BAD_REQUEST',
-        message: 'User ID is required.',
-      },
-    });
-  }
 
   try {
     const user = await usersService.getById(id);
@@ -249,10 +185,11 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response<ApiResponse<U
 router.put(
   '/:id',
   requireAuth,
+  validate(UpdateUserSchema),
   async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
     const address = req.user?.publicKey;
     const { id } = req.params;
-    const body = req.body as UpdateUserRequest;
+    const { name, email } = req.body;
 
     if (!address) {
       return res.status(401).json({
@@ -262,59 +199,6 @@ router.put(
           message: 'Authentication required.',
         },
       });
-    }
-
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message: 'User ID is required.',
-        },
-      });
-    }
-
-    // Check for extra fields
-    const allowedFields = new Set(['name', 'email']);
-    const bodyKeys = Object.keys(body);
-    const extraFields = bodyKeys.filter((key) => !allowedFields.has(key));
-    if (extraFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message: `Unknown fields: ${extraFields.join(', ')}`,
-        },
-      });
-    }
-
-    // Validate name if provided
-    if (body.name !== undefined) {
-      if (typeof body.name !== 'string' || body.name.trim() === '') {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Field "name" must be a non-empty string.',
-          },
-        });
-      }
-    }
-
-    // Validate email if provided
-    if (body.email !== undefined) {
-      if (body.email === null || body.email === '') {
-        // Allow clearing email
-        body.email = undefined;
-      } else if (typeof body.email !== 'string' || !isValidEmail(body.email)) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'BAD_REQUEST',
-            message: 'Field "email" must be a valid RFC email address.',
-          },
-        });
-      }
     }
 
     try {
@@ -341,18 +225,15 @@ router.put(
         });
       }
 
-      const updateData: Record<string, unknown> = {};
-      if (body.name !== undefined) {
-        updateData.name = body.name.trim();
+      const updateData: Partial<Omit<User, 'id' | 'address' | 'createdAt'>> = {};
+      if (name !== undefined) {
+        updateData.name = name.trim();
       }
-      if (body.email !== undefined) {
-        updateData.email = body.email?.trim();
+      if (email !== undefined) {
+        updateData.email = email === null ? undefined : email.trim();
       }
 
-      const updated = await usersService.update(
-        id,
-        updateData as Partial<Omit<User, 'id' | 'address' | 'createdAt'>>
-      );
+      const updated = await usersService.update(id, updateData);
 
       if (!updated) {
         return res.status(404).json({
