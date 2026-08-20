@@ -14,6 +14,21 @@ pub trait AutoShareTrait {
     /// repeated calls.
     fn init(env: Env, admin: Address) -> Result<(), AutoShareError>;
 
+    /// Proposes a new admin for the two-step handover.
+    ///
+    /// Admin-gated.
+    fn propose_admin(env: Env, caller: Address, new_admin: Address) -> Result<(), AutoShareError>;
+
+    /// Accepts the admin proposal, completing the handover.
+    ///
+    /// Only the pending admin may call this.
+    fn accept_admin(env: Env, caller: Address) -> Result<(), AutoShareError>;
+
+    /// Cancels an outstanding admin proposal.
+    ///
+    /// Admin-gated.
+    fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), AutoShareError>;
+
     /// Creates an empty group and indexes it by creator.
     ///
     /// The creator must authorize the call. Returns

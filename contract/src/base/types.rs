@@ -82,6 +82,8 @@ pub enum DataKey {
     CreatorGroups(Address),
     /// Stores the contract admin address for administrative operations.
     Admin,
+    /// Stores the pending admin address for the two-step handover.
+    PendingAdmin,
     /// Current schema version (instance storage, read on nearly every call).
     SchemaVersion,
     /// Global ordered list of all group IDs (persistent storage).
