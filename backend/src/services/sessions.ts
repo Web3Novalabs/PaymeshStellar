@@ -12,7 +12,8 @@ export interface IssuedSession {
 }
 
 export type RotationResult =
-  { status: 'ok'; session: IssuedSession } | { status: 'invalid' | 'expired' | 'reuse' };
+  | { status: 'ok'; session: IssuedSession }
+  | { status: 'invalid' | 'expired' | 'reuse' };
 
 export interface SessionsService {
   create(publicKey: string): Promise<IssuedSession>;
