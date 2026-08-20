@@ -2,9 +2,8 @@
 
 use crate::base::errors::AutoShareError;
 use crate::{AutoShareContract, AutoShareContractClient};
-use soroban_sdk::testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke};
-use soroban_sdk::token::StellarAssetClient;
-use soroban_sdk::{token, vec, Address, BytesN, Env, String, Vec};
+use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::{token, vec, Address, BytesN, Env, String};
 
 fn setup_env() -> (
     Env,
@@ -43,7 +42,7 @@ fn test_create_and_get_schedule() {
     assert_eq!(schedule.remaining_runs, 5);
     assert_eq!(schedule.amount, 100_000);
     assert_eq!(schedule.funder, creator);
-    assert_eq!(schedule.active, true);
+    assert!(schedule.active);
 }
 
 #[test]
