@@ -240,3 +240,22 @@ pub fn require_paused(env: &Env) -> Result<(), AutoShareError> {
         Err(AutoShareError::ContractNotPaused)
     }
 }
+
+/// Checks that the contract is not paused.
+///
+/// # Errors
+///
+/// Returns [`AutoShareError::ContractPaused`] when the contract is paused.
+pub fn require_not_paused(env: &Env) -> Result<(), AutoShareError> {
+    let paused: bool = env
+        .storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false);
+
+    if !paused {
+        Ok(())
+    } else {
+        Err(AutoShareError::ContractPaused)
+    }
+}
