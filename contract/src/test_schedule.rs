@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use crate::base::errors::AutoShareError;
 use crate::{AutoShareContract, AutoShareContractClient};
 use soroban_sdk::testutils::{Address as _, Ledger};
@@ -241,7 +239,7 @@ fn test_remaining_runs_hitting_zero() {
 
     let schedule = client.get_schedule(&id);
     assert_eq!(schedule.remaining_runs, 0);
-    assert_eq!(schedule.active, false);
+    assert!(!schedule.active);
 
     // Further executions return ScheduleInactive
     env.ledger().set_timestamp(first_run_at + 100);
