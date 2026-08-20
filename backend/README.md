@@ -115,9 +115,24 @@ requests validate the JWT session id, so revocation takes effect immediately.
 | `STELLAR_NETWORK`               | Stellar testnet passphrase                      | Network passphrase used to build and verify XDR.                 |
 | `HORIZON_URL`                   | Stellar testnet Horizon                         | Loads current signer weights and medium threshold.               |
 | `DATABASE_URL`                  | Required for non-test auth                      | PostgreSQL connection used for challenges, sessions, and events. |
+| `SOROBAN_RPC_URL`               | Required outside tests                          | Soroban RPC endpoint (e.g. Testnet RPC).                         |
+| `SOROBAN_NETWORK_PASSPHRASE`    | Required outside tests                          | Passphrase for the Soroban network (e.g. Testnet passphrase).    |
+| `AUTOSHARE_CONTRACT_ID`         | Required outside tests                          | Contract ID for the deployed AutoShare smart contract.           |
 
 The refresh cookie requires HTTPS. `SameSite=Strict` also means the frontend and
 API should be deployed as the same site (they may use different subdomains).
+
+## Smart Contract Integration (AutoShare)
+
+The backend provides a proxy and transaction assembly service for the AutoShare Soroban contract via `POST /api/contract/groups/:id/distribute/prepare` and `POST /api/contract/tx/submit`.
+The backend NEVER signs a transaction for a user; the workflow expects client-side signatures:
+
+1. Client calls `prepare` endpoint.
+2. Server validates authorization, calls `simulateTransaction` on the RPC to gather footprint and resource usage, and constructs an unsigned assembled `Transaction` with an automatically boosted resource fee (x1.2 by default).
+3. Server returns the serialized XDR back to the client.
+4. Client signs the XDR with their Stellar wallet.
+5. Client sends the signed XDR to the `submit` endpoint.
+6. Server sends the signed XDR to the RPC endpoint and uses exponential backoff polling to verify successful execution, throwing specific strongly-typed mapped errors if execution fails on-chain.
 
 ## Getting Started
 

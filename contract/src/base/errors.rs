@@ -42,6 +42,14 @@ pub enum AutoShareError {
     /// Appended at 16: 12 through 15 were taken by the upgradeability work, and
     /// discriminants are ABI, so nothing already deployed may be renumbered.
     NothingToClaim = 16,
+    /// A schedule already exists for the requested group.
+    ScheduleAlreadyExists = 17,
+    /// The schedule is not yet due to execute.
+    ScheduleNotDue = 18,
+    /// The schedule is inactive and cannot be executed.
+    ScheduleInactive = 19,
+    /// The contract is currently paused.
+    ContractPaused = 20,
 }
 
 impl AutoShareError {
@@ -91,6 +99,18 @@ impl AutoShareError {
             }
             AutoShareError::NothingToClaim => {
                 "Nothing to claim. This member has no escrowed balance in this group."
+            }
+            AutoShareError::ScheduleAlreadyExists => {
+                "Schedule already exists. A group can only have one active schedule."
+            }
+            AutoShareError::ScheduleNotDue => {
+                "Schedule not due. The current time is before the next scheduled run."
+            }
+            AutoShareError::ScheduleInactive => {
+                "Schedule inactive. The schedule has completed or was cancelled."
+            }
+            AutoShareError::ContractPaused => {
+                "Contract is paused. This operation cannot be performed right now."
             }
         }
     }
