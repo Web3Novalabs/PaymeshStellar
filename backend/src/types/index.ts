@@ -4,6 +4,16 @@ export interface GroupMember {
   percentage: number;
 }
 
+export interface AutoShareDetails {
+  id: string; // 32-byte hex string
+  name: string;
+  creator: string;
+  usage_count: number;
+  payment_token: string;
+  members: GroupMember[];
+  version: number;
+}
+
 export interface Group {
   id: string;
   groupId: string;
