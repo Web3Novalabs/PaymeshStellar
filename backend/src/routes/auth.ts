@@ -6,8 +6,9 @@ import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
 import { challengesService } from '../services/challenges.js';
 import { sessionsService, type IssuedSession } from '../services/sessions.js';
 import { verifySep10Challenge } from '../services/sep10.js';
-import { isValidStellarAddress } from '../utils/stellar.js';
 import { signToken } from '../utils/jwt.js';
+import { validate } from '../middleware/validate.js';
+import { AuthChallengeSchema, AuthVerifySchema } from '../schemas/authSchemas.js';
 
 const router: Router = Router();
 const REFRESH_COOKIE = 'paymesh_refresh';
@@ -73,15 +74,9 @@ function authResponse(res: Response, session: IssuedSession) {
 
 router.post(
   '/challenge',
+  validate(AuthChallengeSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const address = (req.body as { address?: unknown }).address;
-    if (typeof address !== 'string' || !isValidStellarAddress(address)) {
-      res.status(400).json({
-        success: false,
-        error: { code: 'BAD_REQUEST', message: 'A valid Stellar wallet "address" is required.' },
-      });
-      return;
-    }
+    const address = (req.body as { address: string }).address;
 
     const challenge = await challengesService.create(address);
     res.status(200).json({
@@ -99,11 +94,13 @@ router.post(
 
 router.post(
   '/verify',
+  validate(AuthVerifySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const transaction =
-      (req.body as { transaction?: unknown; xdr?: unknown }).transaction ??
-      (req.body as { xdr?: unknown }).xdr;
-    if (typeof transaction !== 'string' || transaction.length === 0) {
+      (req.body as { transaction?: string; xdr?: string }).transaction ??
+      (req.body as { xdr?: string }).xdr;
+
+    if (!transaction) {
       res.status(400).json({
         success: false,
         error: { code: 'BAD_REQUEST', message: 'A signed SEP-10 "transaction" XDR is required.' },

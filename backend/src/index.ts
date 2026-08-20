@@ -12,6 +12,8 @@ import authRouter from './routes/auth.js';
 import { authConfig, validateAuthEnvironment } from './config/auth.js';
 import { challengesService } from './services/challenges.js';
 import { sessionsService } from './services/sessions.js';
+import { idempotency } from './middleware/idempotency.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 validateAuthEnvironment();
@@ -56,6 +58,11 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 app.use('/auth', authRouter);
+
+// Apply rate limiting and idempotency to API routes
+app.use('/api', apiLimiter);
+app.use('/api', idempotency);
+
 app.use('/api/groups', groupsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/users', usersRouter);
