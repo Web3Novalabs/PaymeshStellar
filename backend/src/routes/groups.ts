@@ -1,39 +1,19 @@
 import { Response, Router } from 'express';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth.js';
 import { groupsService } from '../services/groups.js';
-import { isValidStellarAddress } from '../utils/stellar.js';
-import { validateMembers } from '../utils/validateMembers.js';
 import { serializeGroup } from '../utils/serializeGroup.js';
+import { validate } from '../middleware/validate.js';
+import { CreateGroupSchema, ListGroupsSchema, GetGroupSchema, UpdateGroupSchema } from '../schemas/groupSchemas.js';
 
 const router: Router = Router();
-
-function parsePaginationParam(value: unknown, defaultValue: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : defaultValue;
-}
 
 /**
  * POST /api/groups
  * Create a new payroll group. Requires authentication.
  */
-router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireAuth, validate(CreateGroupSchema), async (req: AuthenticatedRequest, res: Response) => {
   const { groupId, name, paymentToken, members } = req.body;
   const creator = req.user!.publicKey;
-
-  if (!groupId || !name || !paymentToken || !Array.isArray(members)) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'BAD_REQUEST',
-        message: 'Missing required fields: groupId, name, paymentToken, and members are required.',
-      },
-    });
-  }
-
-  const memberError = validateMembers(members);
-  if (memberError) {
-    return res.status(400).json({ success: false, error: memberError });
-  }
 
   try {
     const group = await groupsService.create({ groupId, name, creator, paymentToken, members });
@@ -50,31 +30,19 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
  * GET /api/groups
  * List payroll groups with pagination. Requires authentication.
  */
-router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/', requireAuth, validate(ListGroupsSchema), async (req: AuthenticatedRequest, res: Response) => {
   const creator = req.user!.publicKey;
   const creatorFilter = req.query.creator as string | undefined;
 
-  if (creatorFilter) {
-    if (!isValidStellarAddress(creatorFilter)) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message:
-            'Missing required fields: groupId, name, paymentToken, and members are required.',
-        },
-      });
-    }
-    if (creatorFilter !== creator) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Access denied. You can only read your own groups.' },
-      });
-    }
+  if (creatorFilter && creatorFilter !== creator) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Access denied. You can only read your own groups.' },
+    });
   }
 
-  const limit = Math.min(parsePaginationParam(req.query.limit, 10), 100);
-  const offset = parsePaginationParam(req.query.offset, 0);
+  const limit = Number(req.query.limit);
+  const offset = Number(req.query.offset);
 
   try {
     const result = await groupsService.list({ limit, offset, creator: creatorFilter ?? creator });
@@ -102,7 +70,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
  * GET /api/groups/:id
  * Retrieve a specific group. Requires authentication; creator-only access.
  */
-router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', requireAuth, validate(GetGroupSchema), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const creator = req.user!.publicKey;
 
@@ -139,7 +107,7 @@ router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
  * PUT /api/groups/:id
  * Update an existing group. Requires authentication; creator-only.
  */
-router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', requireAuth, validate(UpdateGroupSchema), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { name, paymentToken, members } = req.body;
   const creator = req.user!.publicKey;
@@ -168,20 +136,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
 
     if (name !== undefined) updates.name = name;
     if (paymentToken !== undefined) updates.paymentToken = paymentToken;
-
-    if (members !== undefined) {
-      if (!Array.isArray(members)) {
-        return res.status(400).json({
-          success: false,
-          error: { code: 'BAD_REQUEST', message: 'Members must be an array.' },
-        });
-      }
-      const memberError = validateMembers(members);
-      if (memberError) {
-        return res.status(400).json({ success: false, error: memberError });
-      }
-      updates.members = members;
-    }
+    if (members !== undefined) updates.members = members;
 
     const updatedGroup = await groupsService.update(id, updates);
 

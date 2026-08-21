@@ -40,7 +40,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 50
+                    "lo": 1000
                   }
                 }
               ]
@@ -60,7 +60,7 @@
               "function_name": "create",
               "args": [
                 {
-                  "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                  "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                 },
                 {
                   "string": "Test Group"
@@ -91,7 +91,7 @@
               "function_name": "update_members",
               "args": [
                 {
-                  "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                  "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
@@ -163,6 +163,7 @@
         }
       ]
     ],
+    [],
     []
   ],
   "ledger": {
@@ -350,7 +351,7 @@
                 "val": {
                   "vec": [
                     {
-                      "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                      "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                     }
                   ]
                 }
@@ -371,7 +372,7 @@
                   "symbol": "Group"
                 },
                 {
-                  "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                  "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                 }
               ]
             },
@@ -391,7 +392,7 @@
                       "symbol": "Group"
                     },
                     {
-                      "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                      "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                     }
                   ]
                 },
@@ -411,7 +412,7 @@
                         "symbol": "id"
                       },
                       "val": {
-                        "bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+                        "bytes": "1919191919191919191919191919191919191919191919191919191919191919"
                       }
                     },
                     {
@@ -699,7 +700,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 50
+                          "lo": 1000
                         }
                       }
                     },

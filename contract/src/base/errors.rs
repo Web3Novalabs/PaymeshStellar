@@ -37,6 +37,13 @@ pub enum AutoShareError {
     ContractNotPaused = 14,
     /// The contract has already been initialized.
     AlreadyInitialized = 15,
+    /// The member has no escrow balance left to claim for this group.
+    ///
+    /// Appended at 16: 12 through 15 were taken by the upgradeability work, and
+    /// discriminants are ABI, so nothing already deployed may be renumbered.
+    NothingToClaim = 16,
+    /// The provided expected_version does not match the current group_version.
+    StaleGroupVersion = 17,
 }
 
 impl AutoShareError {
@@ -83,6 +90,12 @@ impl AutoShareError {
             }
             AutoShareError::AlreadyInitialized => {
                 "Already initialized. The contract has already been set up."
+            }
+            AutoShareError::NothingToClaim => {
+                "Nothing to claim. This member has no escrowed balance in this group."
+            }
+            AutoShareError::StaleGroupVersion => {
+                "Stale group version. The group has been modified since you last read it."
             }
         }
     }

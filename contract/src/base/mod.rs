@@ -4,6 +4,8 @@
 pub mod auth;
 /// Contract error codes.
 pub mod errors;
+/// Pull-payment escrow: deposit, per-member claim, and claimable accounting.
+pub mod escrow;
 /// Contract event publishers.
 pub mod events;
 /// Persistent data and storage-key types.

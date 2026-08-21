@@ -3,7 +3,7 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress};
+use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy};
 
 /// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
@@ -37,6 +37,38 @@ pub trait AutoShareTrait {
         id: BytesN<32>,
         caller: Address,
         new_members: Vec<GroupMember>,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Adds a new member to the group, redistributing basis points according to `policy`.
+    fn add_member(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        member: GroupMember,
+        policy: RebalancePolicy,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Removes a member from the group, redistributing their basis points according to `policy`.
+    fn remove_member(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        address: Address,
+        policy: RebalancePolicy,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Updates a member's percentage, redistributing the delta according to `policy`.
+    fn set_member_percentage(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        address: Address,
+        new_bps: u32,
+        policy: RebalancePolicy,
+        expected_version: u32,
     ) -> Result<(), AutoShareError>;
 
     /// Returns a group or [`AutoShareError::GroupNotFound`].
@@ -89,4 +121,32 @@ pub trait AutoShareTrait {
 
     /// Unpauses the contract. Admin-gated.
     fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError>;
+    /// Takes custody of `amount` and credits it to the group's current members.
+    ///
+    /// The escrow counterpart to [`Self::distribute`]: one transfer in, and each
+    /// member withdraws later via [`Self::claim`]. Credits are a snapshot of the
+    /// member set at deposit time.
+    fn deposit(env: Env, id: BytesN<32>, from: Address, amount: i128)
+        -> Result<(), AutoShareError>;
+
+    /// Pays a member's full accrued escrow balance out to themselves.
+    ///
+    /// Returns the amount transferred.
+    fn claim(env: Env, id: BytesN<32>, member: Address) -> Result<i128, AutoShareError>;
+
+    /// Pays a member's full accrued escrow balance out to another address.
+    ///
+    /// Returns the amount transferred. Only `member` authorizes the call.
+    fn claim_to(
+        env: Env,
+        id: BytesN<32>,
+        member: Address,
+        to: Address,
+    ) -> Result<i128, AutoShareError>;
+
+    /// Returns the amount `member` may currently claim from the group.
+    fn claimable_balance(env: Env, id: BytesN<32>, member: Address) -> i128;
+
+    /// Returns the total amount held in escrow for the group.
+    fn total_escrowed(env: Env, id: BytesN<32>) -> i128;
 }

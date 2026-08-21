@@ -29,7 +29,9 @@ pub fn validate_percentages(members: &soroban_sdk::Vec<GroupMember>) -> Result<(
         if member.percentage == 0 {
             return Err(AutoShareError::InvalidPercentage);
         }
-        total += member.percentage;
+        total = total
+            .checked_add(member.percentage)
+            .ok_or(AutoShareError::InvalidPercentage)?;
     }
     if total != 10000 {
         Err(AutoShareError::InvalidPercentage)
