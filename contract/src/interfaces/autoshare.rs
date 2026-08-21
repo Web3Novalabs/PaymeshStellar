@@ -3,7 +3,7 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress};
+use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy};
 
 /// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
@@ -37,6 +37,38 @@ pub trait AutoShareTrait {
         id: BytesN<32>,
         caller: Address,
         new_members: Vec<GroupMember>,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Adds a new member to the group, redistributing basis points according to `policy`.
+    fn add_member(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        member: GroupMember,
+        policy: RebalancePolicy,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Removes a member from the group, redistributing their basis points according to `policy`.
+    fn remove_member(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        address: Address,
+        policy: RebalancePolicy,
+        expected_version: u32,
+    ) -> Result<(), AutoShareError>;
+
+    /// Updates a member's percentage, redistributing the delta according to `policy`.
+    fn set_member_percentage(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        address: Address,
+        new_bps: u32,
+        policy: RebalancePolicy,
+        expected_version: u32,
     ) -> Result<(), AutoShareError>;
 
     /// Returns a group or [`AutoShareError::GroupNotFound`].

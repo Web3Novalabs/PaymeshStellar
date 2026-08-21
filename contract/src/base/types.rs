@@ -6,7 +6,19 @@ use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
 /// Current schema version. Bumped on every storage-layout change.
 /// v1 = implicit pre-versioning layout (no `version` field on groups).
 /// v2 = adds `version: u32` to `AutoShareDetails`.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+/// v3 = adds `group_version: u32` to `AutoShareDetails` for optimistic concurrency.
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+/// Defines how basis points are reallocated when a member's share changes.
+pub enum RebalancePolicy {
+    /// Dilute or concentrate every existing member pro rata based on their current shares.
+    Proportional,
+    /// Take the full amount from, or give the full amount to, one named member.
+    FromMember(Address),
+    ToMember(Address),
+}
 
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
@@ -43,7 +55,22 @@ pub struct AutoShareDetailsV1 {
 
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
-/// Complete persisted configuration for an AutoShare group (v2+).
+/// Legacy v2 group layout with `version` but without `group_version`.
+///
+/// Used during migration to v3.
+pub struct AutoShareDetailsV2 {
+    pub id: BytesN<32>,
+    pub name: String,
+    pub creator: Address,
+    pub usage_count: u32,
+    pub payment_token: Address,
+    pub members: Vec<GroupMember>,
+    pub version: u32,
+}
+
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+/// Complete persisted configuration for an AutoShare group (v3+).
 pub struct AutoShareDetails {
     /// Unique 32-byte group identifier.
     pub id: BytesN<32>,
@@ -59,6 +86,8 @@ pub struct AutoShareDetails {
     pub members: Vec<GroupMember>,
     /// Schema version this record was written with.
     pub version: u32,
+    /// Optimistic concurrency version, bumped on every mutation.
+    pub group_version: u32,
 }
 
 #[contracttype]
