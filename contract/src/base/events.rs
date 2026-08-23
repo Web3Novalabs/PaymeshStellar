@@ -19,6 +19,7 @@ pub fn members_updated(env: &Env, id: &BytesN<32>, member_count: u32) {
         .publish(("autoshare", "members_updated"), (id.clone(), member_count));
 }
 
+/// Publishes an `("autoshare", "member_added")` event.
 pub fn member_added(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u32, new_bps: u32) {
     env.events().publish(
         ("autoshare", "member_added"),
@@ -26,6 +27,7 @@ pub fn member_added(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u32,
     );
 }
 
+/// Publishes an `("autoshare", "member_removed")` event.
 pub fn member_removed(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u32, new_bps: u32) {
     env.events().publish(
         ("autoshare", "member_removed"),
@@ -33,6 +35,7 @@ pub fn member_removed(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u3
     );
 }
 
+/// Publishes an `("autoshare", "member_percentage_updated")` event.
 pub fn member_percentage_updated(
     env: &Env,
     id: &BytesN<32>,

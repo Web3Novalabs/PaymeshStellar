@@ -1,7 +1,9 @@
 //! Authorization and validation helpers used by contract entrypoints.
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, AutoShareDetailsV1, DataKey, GroupMember};
+use crate::base::types::{
+    AutoShareDetails, AutoShareDetailsV1, AutoShareDetailsV2, DataKey, GroupMember,
+};
 use soroban_sdk::{Address, BytesN, Env};
 
 /// Validates that a distribution amount is greater than zero.
@@ -64,9 +66,23 @@ pub fn validate_group_exists(
                         payment_token: v1.payment_token,
                         members: v1.members,
                         version: 1,
+                        group_version: 1,
                     });
                 }
             } else if map.len() == 7 {
+                if let Ok(v2) = AutoShareDetailsV2::try_from_val(env, &val) {
+                    return Ok(AutoShareDetails {
+                        id: v2.id,
+                        name: v2.name,
+                        creator: v2.creator,
+                        usage_count: v2.usage_count,
+                        payment_token: v2.payment_token,
+                        members: v2.members,
+                        version: v2.version,
+                        group_version: 1,
+                    });
+                }
+            } else if map.len() == 8 {
                 if let Ok(details) = AutoShareDetails::try_from_val(env, &val) {
                     return Ok(details);
                 }
