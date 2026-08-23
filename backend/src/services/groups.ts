@@ -63,7 +63,7 @@ export class PgGroupsService implements GroupsService {
       [id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map((m: any) => ({
+    const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
       address: m.address,
       name: m.address, // name not stored in members table currently
       percentage: parseFloat(m.percentage),
@@ -99,7 +99,7 @@ export class PgGroupsService implements GroupsService {
       [g.id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map((m: any) => ({
+    const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
       address: m.address,
       name: m.address,
       percentage: parseFloat(m.percentage),
@@ -123,7 +123,7 @@ export class PgGroupsService implements GroupsService {
     creator?: string;
   }): Promise<{ groups: Group[]; totalCount: number }> {
     let whereClause = '';
-    const params: any[] = [];
+    const params: (string | number)[] = [];
     
     if (options.creator) {
       whereClause = 'WHERE u.wallet_address = $1';
@@ -162,7 +162,7 @@ export class PgGroupsService implements GroupsService {
         [g.id]
       );
       
-      const members: GroupMember[] = membersRes.rows.map((m: any) => ({
+      const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
         address: m.address,
         name: m.address,
         percentage: parseFloat(m.percentage),
@@ -202,7 +202,7 @@ export class PgGroupsService implements GroupsService {
     }
 
     if (groupData.members !== undefined) {
-      await query(`DELETE FROM members WHERE group_id = $1`, [id]);
+      await query('DELETE FROM members WHERE group_id = $1', [id]);
       for (const member of groupData.members) {
         await query(
           `INSERT INTO members (group_id, member_address, percentage) 
@@ -216,7 +216,7 @@ export class PgGroupsService implements GroupsService {
   }
 
   async clear(): Promise<void> {
-    await query(`DELETE FROM groups`);
+    await query('DELETE FROM groups');
   }
 }
 

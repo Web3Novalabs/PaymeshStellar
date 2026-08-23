@@ -9,7 +9,7 @@ const logger = pino();
 export type DriftVariant =
   | { type: 'MissingOnChain' }
   | { type: 'MissingOffChain' }
-  | { type: 'FieldMismatch'; field: string; onchain: any; offchain: any }
+  | { type: 'FieldMismatch'; field: string; onchain: unknown; offchain: unknown }
   | {
       type: 'MemberSetMismatch';
       added: string[]; // addresses on chain not in postgres
@@ -192,21 +192,20 @@ export class ReconciliationService {
           if (drifts.some(d => d.type === 'MissingOnChain')) {
             // Delete offchain
             if (offchainGroup) {
-              await client.query(`DELETE FROM groups WHERE id = $1`, [offchainGroup.id]);
+              await client.query('DELETE FROM groups WHERE id = $1', [offchainGroup.id]);
             }
           } else if (drifts.some(d => d.type === 'MissingOffChain')) {
             // Create offchain from onchain
             if (onchainGroup) {
               // Ensure user
               const userRes = await client.query(
-                `INSERT INTO users (wallet_address, name) VALUES ($1, $1) 
-                 ON CONFLICT (wallet_address) DO UPDATE SET wallet_address = EXCLUDED.wallet_address RETURNING id`,
+                'INSERT INTO users (wallet_address, name) VALUES ($1, $1) ON CONFLICT (wallet_address) DO UPDATE SET wallet_address = EXCLUDED.wallet_address RETURNING id',
                 [onchainGroup.creator]
               );
               const creatorId = userRes.rows[0].id;
 
               const groupRes = await client.query(
-                `INSERT INTO groups (creator_id, name, token, onchain_group_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+                'INSERT INTO groups (creator_id, name, token, onchain_group_id) VALUES ($1, $2, $3, $4) RETURNING id',
                 [creatorId, onchainGroup.id, onchainGroup.token, onchainGroup.id]
               );
               const groupId = groupRes.rows[0].id;
@@ -222,17 +221,17 @@ export class ReconciliationService {
             // Field mismatch
             if (drifts.some(d => d.type === 'FieldMismatch')) {
               await client.query(
-                `UPDATE groups SET token = $1 WHERE id = $2`,
+                'UPDATE groups SET token = $1 WHERE id = $2',
                 [onchainGroup.token, offchainGroup.id]
               );
             }
             
             // MemberSet mismatch
             if (drifts.some(d => d.type === 'MemberSetMismatch')) {
-              await client.query(`DELETE FROM members WHERE group_id = $1`, [offchainGroup.id]);
+              await client.query('DELETE FROM members WHERE group_id = $1', [offchainGroup.id]);
               for (const member of onchainGroup.members) {
                 await client.query(
-                  `INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)`,
+                  'INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)',
                   [offchainGroup.id, member.address, parseFloat(bpsToPercent(member.shareBps))]
                 );
               }
