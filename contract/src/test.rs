@@ -65,7 +65,7 @@ fn setup_group_with_members(
         });
     }
 
-    client.update_members(&id, creator, &members);
+    client.update_members(&id, creator, &members, &1);
     (id, addresses)
 }
 
@@ -120,7 +120,7 @@ fn test_update_members() {
         },
     ];
 
-    client.update_members(&id, &creator, &members);
+    client.update_members(&id, &creator, &members, &1);
     let details = client.get(&id);
     assert_eq!(details.members.len(), 2);
     assert_eq!(details.members.get(0).unwrap().percentage, 6000);
@@ -142,7 +142,7 @@ fn test_update_members_invalid_percentage_too_low() {
         },
     ];
 
-    let result = client.try_update_members(&id, &creator, &members);
+    let result = client.try_update_members(&id, &creator, &members, &1);
     assert!(result.is_err());
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
@@ -165,7 +165,7 @@ fn test_update_members_unauthorized() {
         },
     ];
 
-    let result = client.try_update_members(&id, &other_user, &members);
+    let result = client.try_update_members(&id, &other_user, &members, &1);
     assert!(result.is_err());
     let details = client.get(&id);
     assert_eq!(details.members.len(), 0);
@@ -185,7 +185,7 @@ fn test_update_members_group_not_found() {
         },
     ];
 
-    let result = client.try_update_members(&id, &Address::generate(&env), &members);
+    let result = client.try_update_members(&id, &Address::generate(&env), &members, &1);
     assert!(result.is_err());
 }
 
@@ -213,7 +213,7 @@ fn test_update_members_duplicate_member() {
         },
     ];
 
-    let result = client.try_update_members(&id, &creator, &members);
+    let result = client.try_update_members(&id, &creator, &members, &1);
     assert!(result.is_err());
 }
 
@@ -233,7 +233,7 @@ fn test_update_members_non_creator_panics() {
         },
     ];
     // Non-creator must be rejected with Unauthorized
-    let result = client.try_update_members(&id, &attacker, &members);
+    let result = client.try_update_members(&id, &attacker, &members, &1);
     assert!(result.is_err());
 }
 
@@ -930,7 +930,7 @@ fn test_update_members_emits_members_updated_event() {
             percentage: 10000,
         },
     ];
-    client.update_members(&id, &creator, &members);
+    client.update_members(&id, &creator, &members, &1);
 
     let events = env.events().all();
     let has_updated = events.iter().any(|(_contract, topics, _data)| {
@@ -1087,7 +1087,7 @@ fn test_full_upgrade_lifecycle() {
     );
     assert_eq!(err_create, Err(Ok(AutoShareError::MigrationRequired)));
 
-    let err_update = client.try_update_members(&id1, &creator, &members1);
+    let err_update = client.try_update_members(&id1, &creator, &members1, &1);
     assert_eq!(err_update, Err(Ok(AutoShareError::MigrationRequired)));
 
     let err_distribute = client.try_distribute(&id1, &creator, &100);
@@ -1860,7 +1860,7 @@ fn test_escrow_credits_survive_a_full_member_replacement() {
             percentage: 5000,
         },
     ];
-    client.update_members(&id, &payer, &replacements);
+    client.update_members(&id, &payer, &replacements, &1);
 
     // The original members keep exactly what the earlier deposit credited them.
     assert_eq!(client.claimable_balance(&id, &alice), 600);
@@ -2091,3 +2091,57 @@ fn test_distribute_still_works_alongside_escrow() {
     assert_eq!(client.claim(&id, &alice), 300);
     assert_eq!(token_client.balance(&alice), 900);
 }
+
+#[test]
+fn test_granular_member_management() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, id, creator, _token, members, _) = setup_env_with_group(&env, 3);
+    
+    // Add a member
+    let new_member = GroupMember {
+        address: Address::generate(&env),
+        name: String::from_str(&env, "New Member"),
+        percentage: 1000,
+    };
+    
+    // Version is 1 after creation
+    client.add_member(&id, &creator, &new_member, &RebalancePolicy::Proportional, &1);
+    
+    let group = client.get(&id);
+    assert_eq!(group.group_version, 2);
+    let mut total: u32 = 0;
+    for m in group.members.iter() {
+        total += m.percentage;
+    }
+    assert_eq!(total, 10_000);
+    
+    // Concurrent update should fail
+    let res = client.try_add_member(&id, &creator, &new_member, &RebalancePolicy::Proportional, &1);
+    assert!(res.is_err());
+    
+    // Remove a member
+    let member_to_remove = members.get(0).unwrap().address.clone();
+    client.remove_member(&id, &creator, &member_to_remove, &RebalancePolicy::Proportional, &2);
+    
+    let group2 = client.get(&id);
+    assert_eq!(group2.group_version, 3);
+    let mut total2: u32 = 0;
+    for m in group2.members.iter() {
+        total2 += m.percentage;
+    }
+    assert_eq!(total2, 10_000);
+    
+    // Set percentage
+    let member_to_update = new_member.address.clone();
+    client.set_member_percentage(&id, &creator, &member_to_update, &2000, &RebalancePolicy::Proportional, &3);
+    
+    let group3 = client.get(&id);
+    assert_eq!(group3.group_version, 4);
+    let mut total3: u32 = 0;
+    for m in group3.members.iter() {
+        total3 += m.percentage;
+    }
+    assert_eq!(total3, 10_000);
+}
+
