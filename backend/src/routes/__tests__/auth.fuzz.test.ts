@@ -1,11 +1,12 @@
-import { after, beforeEach, describe, it } from 'node:test';
+import { after, beforeEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { Keypair } from '@stellar/stellar-sdk';
 import { app } from '../../index.js';
 import { challengesService } from '../../services/challenges.js';
+import { sessionsService } from '../../services/sessions.js';
 import { stellarSignatureVerifier } from '../../utils/stellar.js';
 import { signToken } from '../../utils/jwt.js';
+import { pool } from '../../db/index.js';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
@@ -31,8 +32,8 @@ describe('auth input fuzzing', () => {
     '',
     'G',
     'not-a-stellar-address',
-    validAddress.toLowerCase(),
-    `${validAddress}x`,
+    VALID_ADDRESS.toLowerCase(),
+    `${VALID_ADDRESS}x`,
     0,
     true,
     null,
@@ -6750,7 +6751,7 @@ describe('requireAuth — malformed JWT matrix (via protected route)', () => {
       return parts.join('.');
     })();
 
-    const res = await request(app)
+    await request(app)
       .get('/api/groups')
       .set('Authorization', `Bearer ${token}`)
       .expect(401);

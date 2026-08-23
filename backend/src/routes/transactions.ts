@@ -2,7 +2,8 @@ import { Response, Router } from 'express';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth.js';
 import { transactionDataSource, TransactionFilter } from '../services/transactions.js';
 import { groupsService } from '../services/groups.js';
-import { isValidStellarAddress } from '../utils/stellar.js';
+import { validate } from '../middleware/validate.js';
+import { ListTransactionsSchema } from '../schemas/transactionSchemas.js';
 
 const router: Router = Router();
 
