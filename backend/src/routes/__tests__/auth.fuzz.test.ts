@@ -6754,6 +6754,7 @@ describe('requireAuth — malformed JWT matrix (via protected route)', () => {
       .get('/api/groups')
       .set('Authorization', `Bearer ${token}`)
       .expect(401);
+  });
 
   it('keeps the public error envelope stable', async () => {
     const res = await request(app).post('/auth/refresh').expect(401);
