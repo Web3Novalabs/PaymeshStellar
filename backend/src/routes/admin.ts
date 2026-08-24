@@ -1,4 +1,4 @@
-import { Response, Router } from 'express';
+import { NextFunction, Response, Router } from 'express';
 import { AuthenticatedRequest, requireAuth } from '../middleware/auth.js';
 import { reconciliationService } from '../services/reconcile.js';
 
@@ -7,7 +7,7 @@ const router: Router = Router();
 // Ensure the endpoint is admin-gated.
 // Assuming there's some role-check we can do. For now we will check if the user is an admin.
 // If the app doesn't have an admin role in the User model, we'll check against an ADMIN_ADDRESS env var.
-const requireAdmin = (req: AuthenticatedRequest, res: Response, next: any) => {
+const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const adminAddress = process.env.ADMIN_ADDRESS;
   if (!adminAddress || req.user?.publicKey !== adminAddress) {
     res.status(403).json({

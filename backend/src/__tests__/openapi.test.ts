@@ -10,7 +10,7 @@ import OpenAPIResponseValidatorModule from 'openapi-response-validator';
 const OpenAPIResponseValidator = OpenAPIResponseValidatorModule.default || OpenAPIResponseValidatorModule;
 
 describe('OpenAPI Spec Drift Tests', () => {
-  let spec: any;
+  let spec: Record<string, unknown>;
 
   beforeAll(() => {
     const specPath = path.resolve(__dirname, '../../openapi.yaml');

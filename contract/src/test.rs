@@ -69,6 +69,56 @@ fn setup_group_with_members(
     (id, addresses)
 }
 
+fn setup_env_with_group(
+    env: &Env,
+    num_members: u32,
+) -> (
+    AutoShareContractClient<'static>,
+    BytesN<32>,
+    Address,
+    Address,
+    Vec<GroupMember>,
+    u32,
+) {
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    client.init(&admin);
+    let creator = Address::generate(env);
+    let token = Address::generate(env);
+    let id = BytesN::from_array(env, &[1u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(env, "Test Group"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    let mut members = Vec::new(env);
+    if num_members > 0 {
+        let pct_per_member = 10000 / num_members;
+        let mut total_pct = 0;
+        for i in 0..num_members {
+            let pct = if i == num_members - 1 {
+                10000 - total_pct
+            } else {
+                pct_per_member
+            };
+            total_pct += pct;
+            let addr = Address::generate(env);
+            members.push_back(GroupMember {
+                address: addr,
+                name: String::from_str(env, "Member"),
+                percentage: pct,
+            });
+        }
+        client.update_members(&id, &creator, &members, &1);
+    }
+
+    (client, id, creator, token, members, 0)
+}
+
 // ── create / get tests ───────────────────────────────────────────────────────
 
 #[test]
@@ -1860,7 +1910,7 @@ fn test_escrow_credits_survive_a_full_member_replacement() {
             percentage: 5000,
         },
     ];
-    client.update_members(&id, &payer, &replacements, &1);
+    client.update_members(&id, &payer, &replacements, &2);
 
     // The original members keep exactly what the earlier deposit credited them.
     assert_eq!(client.claimable_balance(&id, &alice), 600);
@@ -2097,47 +2147,72 @@ fn test_granular_member_management() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, id, creator, _token, members, _) = setup_env_with_group(&env, 3);
-    
+
     // Add a member
     let new_member = GroupMember {
         address: Address::generate(&env),
         name: String::from_str(&env, "New Member"),
         percentage: 1000,
     };
-    
-    // Version is 1 after creation
-    client.add_member(&id, &creator, &new_member, &RebalancePolicy::Proportional, &1);
-    
+
+    // Version is 2 after creation + member list update
+    client.add_member(
+        &id,
+        &creator,
+        &new_member,
+        &RebalancePolicy::Proportional,
+        &2,
+    );
+
     let group = client.get(&id);
-    assert_eq!(group.group_version, 2);
+    assert_eq!(group.group_version, 3);
     let mut total: u32 = 0;
     for m in group.members.iter() {
         total += m.percentage;
     }
     assert_eq!(total, 10_000);
-    
+
     // Concurrent update should fail
-    let res = client.try_add_member(&id, &creator, &new_member, &RebalancePolicy::Proportional, &1);
+    let res = client.try_add_member(
+        &id,
+        &creator,
+        &new_member,
+        &RebalancePolicy::Proportional,
+        &2,
+    );
     assert!(res.is_err());
-    
+
     // Remove a member
     let member_to_remove = members.get(0).unwrap().address.clone();
-    client.remove_member(&id, &creator, &member_to_remove, &RebalancePolicy::Proportional, &2);
-    
+    client.remove_member(
+        &id,
+        &creator,
+        &member_to_remove,
+        &RebalancePolicy::Proportional,
+        &3,
+    );
+
     let group2 = client.get(&id);
-    assert_eq!(group2.group_version, 3);
+    assert_eq!(group2.group_version, 4);
     let mut total2: u32 = 0;
     for m in group2.members.iter() {
         total2 += m.percentage;
     }
     assert_eq!(total2, 10_000);
-    
+
     // Set percentage
     let member_to_update = new_member.address.clone();
-    client.set_member_percentage(&id, &creator, &member_to_update, &2000, &RebalancePolicy::Proportional, &3);
-    
+    client.set_member_percentage(
+        &id,
+        &creator,
+        &member_to_update,
+        &2000,
+        &RebalancePolicy::Proportional,
+        &4,
+    );
+
     let group3 = client.get(&id);
-    assert_eq!(group3.group_version, 4);
+    assert_eq!(group3.group_version, 5);
     let mut total3: u32 = 0;
     for m in group3.members.iter() {
         total3 += m.percentage;
@@ -2145,3 +2220,98 @@ fn test_granular_member_management() {
     assert_eq!(total3, 10_000);
 }
 
+// ── group creation, retrieval, and querying tests ────────────────────────────
+
+#[test]
+fn test_successful_group_creation_and_retrieval() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[100u8; 32]);
+    let name = String::from_str(&env, "Engineering Team");
+
+    // Test successful group creation
+    let result = client.try_create(&id, &name, &creator, &0, &token);
+    assert!(result.is_ok());
+
+    // Test retrieving created group by ID
+    let details = client.get(&id);
+    assert_eq!(details.id, id);
+    assert_eq!(details.name, name);
+    assert_eq!(details.creator, creator);
+    assert_eq!(details.usage_count, 0);
+    assert_eq!(details.payment_token, token);
+    assert_eq!(details.members.len(), 0);
+}
+
+#[test]
+fn test_group_retrieval_when_group_does_not_exist() {
+    let (_env, client, _creator, _token) = setup_env();
+    let non_existent_id = BytesN::from_array(&_env, &[99u8; 32]);
+
+    // Test group retrieval when group doesn't exist (using try_get to capture error)
+    let result = client.try_get(&non_existent_id);
+    assert!(result.is_err());
+    assert_eq!(result, Err(Ok(AutoShareError::GroupNotFound)));
+}
+
+#[test]
+fn test_get_groups_by_creator_queries() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[101u8; 32]);
+    let name = String::from_str(&env, "Marketing Team");
+
+    client.create(&id, &name, &creator, &5, &token);
+
+    // Test getting groups by creator
+    let groups = client.get_groups_by_creator(&creator);
+    assert_eq!(groups.len(), 1);
+    let group = groups.get(0).unwrap();
+    assert_eq!(group.id, id);
+    assert_eq!(group.name, name);
+    assert_eq!(group.creator, creator);
+}
+
+#[test]
+fn test_multiple_groups_by_same_creator() {
+    let (env, client, creator, token) = setup_env();
+    let id1 = BytesN::from_array(&env, &[102u8; 32]);
+    let id2 = BytesN::from_array(&env, &[103u8; 32]);
+    let name1 = String::from_str(&env, "Sales Team");
+    let name2 = String::from_str(&env, "Support Team");
+
+    client.create(&id1, &name1, &creator, &1, &token);
+    client.create(&id2, &name2, &creator, &2, &token);
+
+    // Test multiple groups by same creator
+    let groups = client.get_groups_by_creator(&creator);
+    assert_eq!(groups.len(), 2);
+
+    let group1 = groups.get(0).unwrap();
+    let group2 = groups.get(1).unwrap();
+
+    // Check that we retrieved both groups correctly
+    assert_eq!(group1.id, id1);
+    assert_eq!(group1.name, name1);
+    assert_eq!(group2.id, id2);
+    assert_eq!(group2.name, name2);
+}
+
+#[test]
+#[should_panic]
+fn test_create_group_requires_authorized_creator() {
+    let env = Env::default();
+    // Do NOT mock_all_auths to test authorization requirement
+
+    let contract_id = env.register(AutoShareContract, ());
+    let client = AutoShareContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.init(&admin);
+
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+    let id = BytesN::from_array(&env, &[104u8; 32]);
+    let name = String::from_str(&env, "Design Team");
+
+    // This call should panic because mock_all_auths was not called,
+    // meaning the creator's authorization is missing/invalid.
+    client.create(&id, &name, &creator, &0, &token);
+}

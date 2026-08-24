@@ -14,7 +14,7 @@ export const idempotency = async (req: Request, res: Response, next: NextFunctio
   try {
     // Check if key exists
     const existingRes = await query(
-      `SELECT status, response_body FROM idempotency_keys WHERE id = $1`,
+      'SELECT status, response_body FROM idempotency_keys WHERE id = $1',
       [key]
     );
 
@@ -37,19 +37,19 @@ export const idempotency = async (req: Request, res: Response, next: NextFunctio
 
     // Insert new key as processing
     await query(
-      `INSERT INTO idempotency_keys (id, status) VALUES ($1, 'processing')`,
+      'INSERT INTO idempotency_keys (id, status) VALUES ($1, \'processing\')',
       [key]
     );
 
     // Wrap res.json to capture response
     const originalJson = res.json;
-    res.json = function (body: any) {
+    res.json = function (body: unknown) {
       // Restore original json to avoid double-calling issues
       res.json = originalJson;
       
       // We don't block the response to the user on this DB update
       query(
-        `UPDATE idempotency_keys SET status = 'completed', response_body = $1 WHERE id = $2`,
+        'UPDATE idempotency_keys SET status = \'completed\', response_body = $1 WHERE id = $2',
         [body, key]
       ).catch(err => {
         console.error('Failed to update idempotency key:', err);
