@@ -1,0 +1,530 @@
+openapi: 3.1.0
+info:
+  title: PaymeshStellar API
+  version: 1.0.0
+  description: API for the PaymeshStellar backend, managing groups, transactions, auth, and reconciliation.
+servers:
+  - url: http://localhost:3001
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        RateLimit-Limit:
+          schema: { type: integer }
+        RateLimit-Remaining:
+          schema: { type: integer }
+        RateLimit-Reset:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: object
+          description: The payload data.
+
+    ErrorEnvelope:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - BAD_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - INTERNAL_ERROR
+                - INTERNAL_SERVER_ERROR
+                - RATE_LIMIT_EXCEEDED
+            message:
+              type: string
+
+    GroupMember:
+      type: object
+      required:
+        - address
+        - name
+        - percentage
+      properties:
+        address:
+          type: string
+        name:
+          type: string
+        percentage:
+          type: number
+
+    Group:
+      type: object
+      required:
+        - id
+        - groupId
+        - name
+        - creator
+        - paymentToken
+        - members
+        - membersCount
+        - createdAt
+      properties:
+        id:
+          type: string
+        groupId:
+          type: string
+        name:
+          type: string
+        creator:
+          type: string
+        paymentToken:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupMember'
+        membersCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      required:
+        - id
+        - groupId
+        - amount
+        - asset
+        - timestamp
+        - membersInvolved
+        - txHash
+      properties:
+        id:
+          type: string
+        groupId:
+          type: string
+        amount:
+          type: string
+        asset:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        membersInvolved:
+          type: array
+          items:
+            type: string
+        txHash:
+          type: string
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - address
+        - name
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/challenge:
+    post:
+      summary: Request an authentication challenge
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [publicKey]
+              properties:
+                publicKey: { type: string }
+      responses:
+        '200':
+          description: Challenge issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          transaction: { type: string }
+                          networkPassphrase: { type: string }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/login:
+    post:
+      summary: Complete authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transaction]
+              properties:
+                transaction: { type: string }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token: { type: string }
+        '401':
+          description: Invalid challenge
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/groups:
+    get:
+      summary: List groups
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+        - in: query
+          name: creator
+          schema: { type: string }
+      responses:
+        '200':
+          description: A list of groups
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          groups:
+                            type: array
+                            items: { $ref: '#/components/schemas/Group' }
+                          pagination:
+                            type: object
+                            properties:
+                              total: { type: integer }
+                              limit: { type: integer }
+                              offset: { type: integer }
+                              hasMore: { type: boolean }
+    post:
+      summary: Create a group
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupId, name, paymentToken, members]
+              properties:
+                groupId: { type: string }
+                name: { type: string }
+                paymentToken: { type: string }
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required: [address, percentage]
+                    properties:
+                      address: { type: string }
+                      percentage: { type: number }
+      responses:
+        '201':
+          description: Group created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Group' }
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/groups/{id}:
+    get:
+      summary: Get a group by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Group' }
+    put:
+      summary: Update a group
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                paymentToken: { type: string }
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required: [address, percentage]
+                    properties:
+                      address: { type: string }
+                      percentage: { type: number }
+      responses:
+        '200':
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Group' }
+
+  /api/transactions:
+    get:
+      summary: List transactions
+      description: Uses cursor-based pagination (divergent from limit/offset in /api/groups)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: groupId
+          schema: { type: string }
+      responses:
+        '200':
+          description: A list of transactions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          data:
+                            type: array
+                            items: { $ref: '#/components/schemas/Transaction' }
+                          limit: { type: integer }
+                          cursor: { type: string }
+                          nextCursor: { type: string }
+                          hasMore: { type: boolean }
+
+  /api/users:
+    post:
+      summary: Create user profile
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                email: { type: string }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserResponse' }
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/users/me:
+    get:
+      summary: Get current user
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserResponse' }
+
+  /api/users/{id}:
+    get:
+      summary: Get user by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserResponse' }
+    put:
+      summary: Update user profile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserResponse' }
+
+  /api/admin/reconcile:
+    get:
+      summary: Run or fetch reconciliation report
+      parameters:
+        - in: query
+          name: group_id
+          schema: { type: string }
+      responses:
+        '200':
+          description: Reconciliation report
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: The drift report or reconciliation payload

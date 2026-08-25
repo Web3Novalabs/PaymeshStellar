@@ -267,12 +267,13 @@ export class HorizonService {
    * Implementation of jittered exponential backoff for transient failures.
    */
   private async withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
         () => reject(new HorizonError('Request timeout', 408, 'TIMEOUT')),
         this.REQUEST_TIMEOUT
-      )
-    );
+      );
+    });
 
     try {
       return (await Promise.race([fn(), timeoutPromise])) as T;
@@ -297,6 +298,10 @@ export class HorizonService {
         return this.withRetry(fn, retries - 1, nextDelay);
       }
       throw error;
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 
