@@ -20,6 +20,9 @@ pub enum RebalancePolicy {
     ToMember(Address),
 }
 
+/// Maximum number of missed intervals processed in a single execution catch-up loop.
+pub const MAX_CATCHUP: u32 = 10;
+
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
 /// A recipient and their configured share of a group distribution.
@@ -103,6 +106,24 @@ pub struct MigrationProgress {
 }
 
 #[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+/// Configuration and state for an automated token distribution schedule.
+pub struct Schedule {
+    /// Time between consecutive distributions in seconds.
+    pub interval_secs: u64,
+    /// Unix timestamp of the next expected execution.
+    pub next_run_at: u64,
+    /// Number of successful executions remaining before completion.
+    pub remaining_runs: u32,
+    /// Amount to distribute on each run.
+    pub amount: i128,
+    /// Account funding the distributions.
+    pub funder: Address,
+    /// True if the schedule is currently enabled.
+    pub active: bool,
+}
+
+#[contracttype]
 /// Keys used by the contract's persistent and instance storage.
 pub enum DataKey {
     /// Maps a group identifier to its [`AutoShareDetails`].
@@ -136,4 +157,6 @@ pub enum DataKey {
     ///
     /// Always equal to the sum of that group's [`DataKey::Claimable`] entries.
     Escrowed(BytesN<32>),
+    /// Maps a group identifier to its active [`Schedule`].
+    Schedule(BytesN<32>),
 }

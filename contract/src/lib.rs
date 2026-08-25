@@ -18,6 +18,7 @@ mod prop_tests;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
+mod test_schedule;
 mod test_admin;
 
 use base::auth::{
@@ -29,7 +30,7 @@ use base::errors::AutoShareError;
 use base::events;
 use base::types::{
     AutoShareDetails, AutoShareDetailsV1, AutoShareDetailsV2, DataKey, GroupMember,
-    MigrationProgress, RebalancePolicy, CURRENT_SCHEMA_VERSION,
+    MigrationProgress, RebalancePolicy, Schedule, CURRENT_SCHEMA_VERSION, MAX_CATCHUP,
 };
 use interfaces::autoshare::AutoShareTrait;
 
@@ -940,6 +941,141 @@ mod contract_impl {
         /// Always equal to the sum of the group's outstanding claimable balances.
         fn total_escrowed(env: Env, id: BytesN<32>) -> i128 {
             base::escrow::total_escrowed(&env, &id)
+        }
+
+        fn create_schedule(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+            interval_secs: u64,
+            first_run_at: u64,
+            runs: u32,
+            amount: i128,
+        ) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
+            require_migration_current(&env)?;
+            
+            let details = validate_group_exists(&env, &id)?;
+            require_group_creator(&env, &details, &caller)?;
+
+            if interval_secs == 0 || runs == 0 {
+                panic!("interval and runs must be positive");
+            }
+            if first_run_at < env.ledger().timestamp() {
+                panic!("first_run_at must be in the future");
+            }
+            validate_amount(amount)?;
+
+            let key = DataKey::Schedule(id.clone());
+            if env.storage().persistent().has(&key) {
+                return Err(AutoShareError::ScheduleAlreadyExists);
+            }
+
+            let schedule = Schedule {
+                interval_secs,
+                next_run_at: first_run_at,
+                remaining_runs: runs,
+                amount,
+                funder: caller.clone(),
+                active: true,
+            };
+
+            env.storage().persistent().set(&key, &schedule);
+            events::schedule_created(&env, &id, &caller);
+            Ok(())
+        }
+
+        fn execute_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
+            require_migration_current(&env)?;
+            
+            caller.require_auth(); // Keeper
+
+            let key = DataKey::Schedule(id.clone());
+            let mut schedule: Schedule = env
+                .storage()
+                .persistent()
+                .get(&key)
+                .expect("schedule not found");
+
+            if !schedule.active {
+                return Err(AutoShareError::ScheduleInactive);
+            }
+
+            let now = env.ledger().timestamp();
+            if now < schedule.next_run_at {
+                return Err(AutoShareError::ScheduleNotDue);
+            }
+
+            schedule.funder.require_auth();
+
+            let details = validate_group_exists(&env, &id).expect("group not found");
+            
+            if details.members.is_empty() {
+                return Err(AutoShareError::EmptyMembers);
+            }
+
+            let runs_due = ((now - schedule.next_run_at) / schedule.interval_secs) as u32 + 1;
+            let runs_to_execute = runs_due.min(MAX_CATCHUP).min(schedule.remaining_runs);
+
+            let token_client = token::Client::new(&env, &details.payment_token);
+            let total_amount = schedule.amount.checked_mul(runs_to_execute as i128).expect("amount overflow");
+            
+            if token_client.balance(&schedule.funder) < total_amount {
+                return Err(AutoShareError::InsufficientBalance);
+            }
+
+            for _ in 0..runs_to_execute {
+                let shares = base::utils::distribute_amounts(&env, schedule.amount, &details.members)
+                    .expect("failed to distribute amounts");
+                
+                for (i, member) in details.members.iter().enumerate() {
+                    let share = shares.get(i as u32).unwrap();
+                    if share > 0 {
+                        token_client.transfer(&schedule.funder, &member.address, &share);
+                    }
+                }
+                
+                events::schedule_executed(&env, &id, schedule.remaining_runs);
+                schedule.remaining_runs -= 1;
+            }
+
+            let intervals_passed = (now - schedule.next_run_at) / schedule.interval_secs;
+            schedule.next_run_at += (intervals_passed + 1) * schedule.interval_secs;
+
+            if schedule.remaining_runs == 0 {
+                schedule.active = false;
+                events::schedule_completed(&env, &id);
+            }
+
+            env.storage().persistent().set(&key, &schedule);
+            Ok(())
+        }
+
+        fn cancel_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError> {
+            require_not_paused(&env)?;
+            require_migration_current(&env)?;
+            
+            let details = validate_group_exists(&env, &id)?;
+            require_group_creator(&env, &details, &caller)?;
+
+            let key = DataKey::Schedule(id.clone());
+            let mut schedule: Schedule = env
+                .storage()
+                .persistent()
+                .get(&key)
+                .expect("schedule not found");
+                
+            schedule.active = false;
+            env.storage().persistent().set(&key, &schedule);
+            events::schedule_cancelled(&env, &id);
+            
+            Ok(())
+        }
+
+        fn get_schedule(env: Env, id: BytesN<32>) -> Result<Schedule, AutoShareError> {
+            let key = DataKey::Schedule(id);
+            env.storage().persistent().get(&key).ok_or(AutoShareError::GroupNotFound)
         }
     }
 }

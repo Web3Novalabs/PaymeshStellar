@@ -3,7 +3,7 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy};
+use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy, Schedule};
 
 /// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {
@@ -164,4 +164,30 @@ pub trait AutoShareTrait {
 
     /// Returns the total amount held in escrow for the group.
     fn total_escrowed(env: Env, id: BytesN<32>) -> i128;
+
+    /// Creates an automated token distribution schedule.
+    ///
+    /// The `caller` must be the group creator. A group may only have one schedule.
+    fn create_schedule(
+        env: Env,
+        id: BytesN<32>,
+        caller: Address,
+        interval_secs: u64,
+        first_run_at: u64,
+        runs: u32,
+        amount: i128,
+    ) -> Result<(), AutoShareError>;
+
+    /// Executes a due automated token distribution schedule.
+    ///
+    /// This is a permissionless keeper call. Returns an error if not due or inactive.
+    fn execute_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError>;
+
+    /// Cancels an active schedule.
+    ///
+    /// The `caller` must be the group creator.
+    fn cancel_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError>;
+
+    /// Returns the schedule for a group, if any.
+    fn get_schedule(env: Env, id: BytesN<32>) -> Result<Schedule, AutoShareError>;
 }

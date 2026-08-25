@@ -44,6 +44,14 @@ pub enum AutoShareError {
     NothingToClaim = 16,
     /// The provided expected_version does not match the current group_version.
     StaleGroupVersion = 17,
+    /// A schedule already exists for the requested group.
+    ScheduleAlreadyExists = 18,
+    /// The schedule is not yet due to execute.
+    ScheduleNotDue = 19,
+    /// The schedule is inactive and cannot be executed.
+    ScheduleInactive = 20,
+    /// The contract is currently paused.
+    ContractPaused = 21,
 }
 
 impl AutoShareError {
@@ -96,6 +104,18 @@ impl AutoShareError {
             }
             AutoShareError::StaleGroupVersion => {
                 "Stale group version. The group has been modified since you last read it."
+            }
+            AutoShareError::ScheduleAlreadyExists => {
+                "Schedule already exists. A group can only have one active schedule."
+            }
+            AutoShareError::ScheduleNotDue => {
+                "Schedule not due. The current time is before the next scheduled run."
+            }
+            AutoShareError::ScheduleInactive => {
+                "Schedule inactive. The schedule has completed or was cancelled."
+            }
+            AutoShareError::ContractPaused => {
+                "Contract is paused. This operation cannot be performed right now."
             }
         }
     }

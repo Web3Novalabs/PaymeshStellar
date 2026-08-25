@@ -129,3 +129,35 @@ pub fn escrow_claimed(env: &Env, id: &BytesN<32>, member: &Address, to: &Address
         (id.clone(), member.clone(), to.clone(), amount),
     );
 }
+
+/// Publishes an `("autoshare", "schedule_created")` event.
+///
+/// Topics are `"autoshare"` and `"schedule_created"`. The payload is `(id, funder)`.
+pub fn schedule_created(env: &Env, id: &BytesN<32>, funder: &Address) {
+    env.events()
+        .publish(("autoshare", "schedule_created"), (id.clone(), funder.clone()));
+}
+
+/// Publishes an `("autoshare", "schedule_executed")` event.
+///
+/// Topics are `"autoshare"` and `"schedule_executed"`. The payload is `(id, run_index)`.
+pub fn schedule_executed(env: &Env, id: &BytesN<32>, run_index: u32) {
+    env.events()
+        .publish(("autoshare", "schedule_executed"), (id.clone(), run_index));
+}
+
+/// Publishes an `("autoshare", "schedule_cancelled")` event.
+///
+/// Topics are `"autoshare"` and `"schedule_cancelled"`. The payload is the group `id`.
+pub fn schedule_cancelled(env: &Env, id: &BytesN<32>) {
+    env.events()
+        .publish(("autoshare", "schedule_cancelled"), id.clone());
+}
+
+/// Publishes an `("autoshare", "schedule_completed")` event.
+///
+/// Topics are `"autoshare"` and `"schedule_completed"`. The payload is the group `id`.
+pub fn schedule_completed(env: &Env, id: &BytesN<32>) {
+    env.events()
+        .publish(("autoshare", "schedule_completed"), id.clone());
+}
