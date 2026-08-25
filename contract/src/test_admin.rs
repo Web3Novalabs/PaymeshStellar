@@ -2,7 +2,7 @@
 
 use crate::{AutoShareContract, AutoShareContractClient};
 use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke};
-use soroban_sdk::{vec, Address, BytesN, Env, IntoVal, String, Symbol, TryIntoVal, TryFromVal};
+use soroban_sdk::{vec, Address, BytesN, Env, IntoVal, String, TryIntoVal};
 
 // 1. init twice returns AlreadyInitialized; state from the first call is untouched.
 #[test]
@@ -77,9 +77,11 @@ fn test_pause_unauthorized_and_authorized() {
             if topics.len() == 2 {
                 let t0: Result<String, _> = topics.get(0).unwrap().try_into_val(&env);
                 let t1: Result<String, _> = topics.get(1).unwrap().try_into_val(&env);
-                
+
                 if let (Ok(topic0), Ok(topic1)) = (t0, t1) {
-                    if topic0 == String::from_str(&env, "autoshare") && topic1 == String::from_str(&env, "paused") {
+                    if topic0 == String::from_str(&env, "autoshare")
+                        && topic1 == String::from_str(&env, "paused")
+                    {
                         found = true;
                         break;
                     }
