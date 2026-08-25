@@ -62,6 +62,7 @@ fn test_timestamp_boundaries() {
                 percentage: 10000,
             },
         ],
+        &1,
     );
 
     let token_admin = token::StellarAssetClient::new(&env, &token);
@@ -115,6 +116,7 @@ fn test_no_drift_random_offsets() {
                 percentage: 10000,
             },
         ],
+        &1,
     );
 
     let token_admin = token::StellarAssetClient::new(&env, &token);
@@ -164,6 +166,7 @@ fn test_funder_drained_and_recovered() {
                 percentage: 10000,
             },
         ],
+        &1,
     );
 
     let token_admin = token::StellarAssetClient::new(&env, &token);
@@ -222,6 +225,7 @@ fn test_remaining_runs_hitting_zero() {
                 percentage: 10000,
             },
         ],
+        &1,
     );
 
     let token_admin = token::StellarAssetClient::new(&env, &token);

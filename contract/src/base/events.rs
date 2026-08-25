@@ -19,6 +19,36 @@ pub fn members_updated(env: &Env, id: &BytesN<32>, member_count: u32) {
         .publish(("autoshare", "members_updated"), (id.clone(), member_count));
 }
 
+/// Publishes an `("autoshare", "member_added")` event.
+pub fn member_added(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u32, new_bps: u32) {
+    env.events().publish(
+        ("autoshare", "member_added"),
+        (id.clone(), address.clone(), old_bps, new_bps),
+    );
+}
+
+/// Publishes an `("autoshare", "member_removed")` event.
+pub fn member_removed(env: &Env, id: &BytesN<32>, address: &Address, old_bps: u32, new_bps: u32) {
+    env.events().publish(
+        ("autoshare", "member_removed"),
+        (id.clone(), address.clone(), old_bps, new_bps),
+    );
+}
+
+/// Publishes an `("autoshare", "member_percentage_updated")` event.
+pub fn member_percentage_updated(
+    env: &Env,
+    id: &BytesN<32>,
+    address: &Address,
+    old_bps: u32,
+    new_bps: u32,
+) {
+    env.events().publish(
+        ("autoshare", "member_percentage_updated"),
+        (id.clone(), address.clone(), old_bps, new_bps),
+    );
+}
+
 /// Publishes an `("autoshare", "distributed")` event.
 ///
 /// Topics are `"autoshare"` and `"distributed"`. The payload is
@@ -55,6 +85,26 @@ pub fn paused(env: &Env) {
 /// Publishes an `("autoshare", "unpaused")` event.
 pub fn unpaused(env: &Env) {
     env.events().publish(("autoshare", "unpaused"), ());
+}
+
+/// Publishes an `("autoshare", "initialized")` event.
+pub fn initialized(env: &Env, admin: &Address) {
+    env.events()
+        .publish(("autoshare", "initialized"), admin.clone());
+}
+
+/// Publishes an `("autoshare", "admin_proposed")` event.
+pub fn admin_proposed(env: &Env, new_admin: &Address) {
+    env.events()
+        .publish(("autoshare", "admin_proposed"), new_admin.clone());
+}
+
+/// Publishes an `("autoshare", "admin_transferred")` event.
+pub fn admin_transferred(env: &Env, old_admin: &Address, new_admin: &Address) {
+    env.events().publish(
+        ("autoshare", "admin_transferred"),
+        (old_admin.clone(), new_admin.clone()),
+    );
 }
 
 /// Publishes an `("autoshare", "escrow_deposited")` event.

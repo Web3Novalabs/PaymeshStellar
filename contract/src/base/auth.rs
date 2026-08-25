@@ -1,7 +1,9 @@
 //! Authorization and validation helpers used by contract entrypoints.
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, AutoShareDetailsV1, DataKey, GroupMember};
+use crate::base::types::{
+    AutoShareDetails, AutoShareDetailsV1, AutoShareDetailsV2, DataKey, GroupMember,
+};
 use soroban_sdk::{Address, BytesN, Env};
 
 /// Validates that a distribution amount is greater than zero.
@@ -64,9 +66,23 @@ pub fn validate_group_exists(
                         payment_token: v1.payment_token,
                         members: v1.members,
                         version: 1,
+                        group_version: 1,
                     });
                 }
             } else if map.len() == 7 {
+                if let Ok(v2) = AutoShareDetailsV2::try_from_val(env, &val) {
+                    return Ok(AutoShareDetails {
+                        id: v2.id,
+                        name: v2.name,
+                        creator: v2.creator,
+                        usage_count: v2.usage_count,
+                        payment_token: v2.payment_token,
+                        members: v2.members,
+                        version: v2.version,
+                        group_version: 1,
+                    });
+                }
+            } else if map.len() == 8 {
                 if let Ok(details) = AutoShareDetails::try_from_val(env, &val) {
                     return Ok(details);
                 }
@@ -173,8 +189,8 @@ pub fn require_group_member(
 ///
 /// # Errors
 ///
-/// Returns [`AutoShareError::Unauthorized`] when no admin has been set or
-/// when `caller` is not the admin.
+/// Returns [`AutoShareError::NotInitialized`] when no admin has been set or
+/// [`AutoShareError::Unauthorized`] when `caller` is not the admin.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> {
     caller.require_auth();
 
@@ -183,7 +199,7 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AutoShareError> 
         .instance()
         .get(&DataKey::Admin)
         .or_else(|| env.storage().persistent().get(&DataKey::Admin))
-        .ok_or(AutoShareError::Unauthorized)?;
+        .ok_or(AutoShareError::NotInitialized)?;
 
     if admin == *caller {
         Ok(())
@@ -253,9 +269,9 @@ pub fn require_not_paused(env: &Env) -> Result<(), AutoShareError> {
         .get(&DataKey::Paused)
         .unwrap_or(false);
 
-    if !paused {
-        Ok(())
-    } else {
+    if paused {
         Err(AutoShareError::ContractPaused)
+    } else {
+        Ok(())
     }
 }

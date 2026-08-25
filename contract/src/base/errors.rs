@@ -50,6 +50,12 @@ pub enum AutoShareError {
     ScheduleInactive = 19,
     /// The contract is currently paused.
     ContractPaused = 20,
+    /// The provided expected_version does not match the current group_version.
+    StaleGroupVersion = 21,
+    /// No pending admin transfer exists.
+    NoPendingAdmin = 22,
+    /// The contract has not been initialized.
+    NotInitialized = 23,
 }
 
 impl AutoShareError {
@@ -111,6 +117,15 @@ impl AutoShareError {
             }
             AutoShareError::ContractPaused => {
                 "Contract is paused. This operation cannot be performed right now."
+            }
+            AutoShareError::StaleGroupVersion => {
+                "Stale group version. The group has been modified since you last read it."
+            }
+            AutoShareError::NoPendingAdmin => {
+                "No pending admin transfer to accept."
+            }
+            AutoShareError::NotInitialized => {
+                "Not initialized. The contract must be initialized before use."
             }
         }
     }
