@@ -1,4 +1,4 @@
-#![cfg(test)]
+
 
 use crate::{AutoShareContract, AutoShareContractClient};
 use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke};

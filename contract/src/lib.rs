@@ -329,7 +329,7 @@ mod contract_impl {
                 .persistent()
                 .set(&DataKey::Group(id.clone()), &details);
 
-            events::members_updated(&env, &id, count as u32);
+            events::members_updated(&env, &id, count);
             Ok(())
         }
 
@@ -363,7 +363,7 @@ mod contract_impl {
 
             // Rebalance existing members to make room for `member.percentage`
             let mut members = details.members;
-            if members.len() == 0 {
+            if members.is_empty() {
                 // adding first member must have exactly 10_000
                 if member.percentage != 10_000 {
                     return Err(AutoShareError::InvalidPercentage);
@@ -416,7 +416,7 @@ mod contract_impl {
             let idx = removed_idx.ok_or(AutoShareError::MemberNotFound)?;
             members.remove(idx);
 
-            if members.len() == 0 {
+            if members.is_empty() {
                 return Err(AutoShareError::EmptyMembers);
             }
 
@@ -479,7 +479,7 @@ mod contract_impl {
 
             members.remove(idx); // temporarly remove to rebalance others
 
-            if members.len() == 0 {
+            if members.is_empty() {
                 // If only 1 member, percentage must be 10_000
                 if new_bps != 10_000 {
                     return Err(AutoShareError::InvalidPercentage);
