@@ -63,13 +63,13 @@ export class PgGroupsService implements GroupsService {
       [id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map(
-      (m: { address: string; percentage: string }) => ({
-        address: m.address,
-        name: m.address, // name not stored in members table currently
-        percentage: parseFloat(m.percentage),
-      })
-    );
+    const members: GroupMember[] = (
+      membersRes.rows as { address: string; percentage: string }[]
+    ).map((m) => ({
+      address: m.address,
+      name: m.address, // name not stored in members table currently
+      percentage: parseFloat(m.percentage),
+    }));
 
     return {
       id: g.id,
@@ -101,13 +101,13 @@ export class PgGroupsService implements GroupsService {
       [g.id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map(
-      (m: { address: string; percentage: string }) => ({
-        address: m.address,
-        name: m.address,
-        percentage: parseFloat(m.percentage),
-      })
-    );
+    const members: GroupMember[] = (
+      membersRes.rows as { address: string; percentage: string }[]
+    ).map((m) => ({
+      address: m.address,
+      name: m.address,
+      percentage: parseFloat(m.percentage),
+    }));
 
     return {
       id: g.id,
@@ -166,13 +166,13 @@ export class PgGroupsService implements GroupsService {
         [g.id]
       );
 
-      const members: GroupMember[] = membersRes.rows.map(
-        (m: { address: string; percentage: string }) => ({
-          address: m.address,
-          name: m.address,
-          percentage: parseFloat(m.percentage),
-        })
-      );
+      const members: GroupMember[] = (
+        membersRes.rows as { address: string; percentage: string }[]
+      ).map((m) => ({
+        address: m.address,
+        name: m.address,
+        percentage: parseFloat(m.percentage),
+      }));
 
       groups.push({
         id: g.id,
