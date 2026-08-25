@@ -488,15 +488,16 @@ function parseURLState(searchParams: URLSearchParams): Partial<WizardState> {
   if (step && STEP_ORDER.includes(step)) {
     result.step = step;
   }
-  if (name) {
-    result.details = { ...result.details, name };
+
+  const details: Partial<GroupDetails> = {};
+  if (name) details.name = name;
+  if (token) details.paymentToken = token;
+  if (usage) details.usageCount = parseInt(usage, 10) || 1;
+
+  if (Object.keys(details).length > 0) {
+    result.details = details as GroupDetails;
   }
-  if (token) {
-    result.details = { ...result.details, paymentToken: token };
-  }
-  if (usage) {
-    result.details = { ...result.details, usageCount: parseInt(usage, 10) || 1 };
-  }
+
   if (membersCount) {
     // Members are not stored in URL for size reasons, just the count
   }
@@ -512,7 +513,8 @@ function deepMerge<T>(target: T, ...sources: Partial<T>[]): T {
     for (const key in source) {
       if (isObject(source[key])) {
         if (!target[key]) Object.assign(target, { [key]: {} });
-        deepMerge(target[key], source[key]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        deepMerge((target as any)[key], (source as any)[key]);
       } else {
         Object.assign(target, { [key]: source[key] });
       }
@@ -523,5 +525,5 @@ function deepMerge<T>(target: T, ...sources: Partial<T>[]): T {
 }
 
 function isObject(item: unknown): item is Record<string, unknown> {
-  return item && typeof item === 'object' && !Array.isArray(item);
+  return Boolean(item) && typeof item === 'object' && !Array.isArray(item);
 }

@@ -63,6 +63,8 @@ export async function refreshAccessToken(): Promise<AuthTokens> {
   return data;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  return request<T>(path, { method: 'GET' });
-}
+export const apiClient = {
+  get: <T>(path: string, options?: RequestInit) => request<T>(path, { ...options, method: 'GET' }),
+  post: <T>(path: string, body?: unknown, options?: RequestInit) =>
+    request<T>(path, { ...options, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+};
