@@ -42,14 +42,16 @@ pub enum AutoShareError {
     /// Appended at 16: 12 through 15 were taken by the upgradeability work, and
     /// discriminants are ABI, so nothing already deployed may be renumbered.
     NothingToClaim = 16,
+    /// The provided expected_version does not match the current group_version.
+    StaleGroupVersion = 17,
     /// A schedule already exists for the requested group.
-    ScheduleAlreadyExists = 17,
+    ScheduleAlreadyExists = 18,
     /// The schedule is not yet due to execute.
-    ScheduleNotDue = 18,
+    ScheduleNotDue = 19,
     /// The schedule is inactive and cannot be executed.
-    ScheduleInactive = 19,
+    ScheduleInactive = 20,
     /// The contract is currently paused.
-    ContractPaused = 20,
+    ContractPaused = 21,
 }
 
 impl AutoShareError {
@@ -99,6 +101,9 @@ impl AutoShareError {
             }
             AutoShareError::NothingToClaim => {
                 "Nothing to claim. This member has no escrowed balance in this group."
+            }
+            AutoShareError::StaleGroupVersion => {
+                "Stale group version. The group has been modified since you last read it."
             }
             AutoShareError::ScheduleAlreadyExists => {
                 "Schedule already exists. A group can only have one active schedule."

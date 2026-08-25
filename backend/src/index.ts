@@ -12,6 +12,10 @@ import authRouter from './routes/auth.js';
 import { authConfig, validateAuthEnvironment } from './config/auth.js';
 import { challengesService } from './services/challenges.js';
 import { sessionsService } from './services/sessions.js';
+import { idempotency } from './middleware/idempotency.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
+import adminRouter from './routes/admin.js';
+import { reconciliationService } from './services/reconcile.js';
 
 dotenv.config();
 validateAuthEnvironment();
@@ -43,6 +47,7 @@ app.get('/health', (_req: Request, res: Response) => {
     status: 'ok',
     uptime: Math.floor((Date.now() - startTime) / 1000),
     version: process.env.npm_package_version ?? '0.1.0',
+    reconciliation: reconciliationService.getHealth(),
   });
 });
 
@@ -56,6 +61,12 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 app.use('/auth', authRouter);
+
+// Apply rate limiting and idempotency to API routes
+app.use('/api', apiLimiter);
+app.use('/api', idempotency);
+
+app.use('/api/admin', adminRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/users', usersRouter);
@@ -73,6 +84,15 @@ if (process.env.NODE_ENV !== 'test') {
     );
   }, authConfig().cleanupIntervalSeconds * 1000);
   cleanupTimer.unref();
+
+  // Start reconciliation background task
+  const RECONCILE_INTERVAL_MS = parseInt(process.env.RECONCILE_INTERVAL_MS || '3600000', 10);
+  const reconcileTimer = setInterval(() => {
+    reconciliationService.reconcileAll().catch((err: unknown) => {
+      console.error('Background reconciliation failed:', err);
+    });
+  }, RECONCILE_INTERVAL_MS);
+  reconcileTimer.unref();
 
   app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
