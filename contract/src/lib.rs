@@ -1078,7 +1078,6 @@ mod contract_impl {
                 .persistent()
                 .get(&key)
                 .expect("schedule not found");
-
             schedule.active = false;
             env.storage().persistent().set(&key, &schedule);
             events::schedule_cancelled(&env, &id);
