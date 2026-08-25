@@ -18,9 +18,9 @@ mod prop_tests;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
-mod test_schedule;
-#[cfg(test)]
 mod test_admin;
+#[cfg(test)]
+mod test_schedule;
 
 use base::auth::{
     require_admin, require_group_creator, require_migration_current, require_not_paused,

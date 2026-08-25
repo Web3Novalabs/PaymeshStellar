@@ -121,9 +121,7 @@ impl AutoShareError {
             AutoShareError::StaleGroupVersion => {
                 "Stale group version. The group has been modified since you last read it."
             }
-            AutoShareError::NoPendingAdmin => {
-                "No pending admin transfer to accept."
-            }
+            AutoShareError::NoPendingAdmin => "No pending admin transfer to accept.",
             AutoShareError::NotInitialized => {
                 "Not initialized. The contract must be initialized before use."
             }
