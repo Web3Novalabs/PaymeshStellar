@@ -8,7 +8,7 @@ const level = process.env.LOG_LEVEL ?? (env === 'production' ? 'info' : 'debug')
 export const logger = pino({
   level,
   transport:
-    env !== 'production'
+    env !== 'production' && env !== 'test'
       ? {
           target: 'pino-pretty',
           options: {

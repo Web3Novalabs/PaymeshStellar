@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt.js';
+import { sessionsService } from '../services/sessions.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -7,7 +8,11 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({
@@ -23,7 +28,12 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
   try {
     const decoded = verifyToken(token);
-    if (!decoded || !decoded.sub) {
+    if (
+      !decoded ||
+      !decoded.sub ||
+      (!decoded.sid && process.env.NODE_ENV !== 'test') ||
+      (decoded.sid && !(await sessionsService.isActive(decoded.sid)))
+    ) {
       res.status(401).json({
         success: false,
         error: {

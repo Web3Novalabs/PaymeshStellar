@@ -13,16 +13,111 @@ use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String, V
 pub mod base;
 /// Public contract interface definitions.
 pub mod interfaces;
+#[cfg(test)]
+mod prop_tests;
 mod test;
 
 use base::auth::{
-    require_group_creator, validate_amount, validate_group_exists, validate_members_unique,
-    validate_percentages,
+    require_admin, require_group_creator, require_migration_current, require_paused,
+    validate_amount, validate_group_exists, validate_members_unique, validate_percentages,
 };
 use base::errors::AutoShareError;
 use base::events;
-use base::types::{AutoShareDetails, DataKey, GroupMember};
+use base::types::{
+    AutoShareDetails, AutoShareDetailsV1, AutoShareDetailsV2, DataKey, GroupMember,
+    MigrationProgress, RebalancePolicy, CURRENT_SCHEMA_VERSION,
+};
 use interfaces::autoshare::AutoShareTrait;
+
+fn apply_rebalance(
+    env: &Env,
+    mut members: Vec<GroupMember>,
+    delta_bps: i64,
+    policy: RebalancePolicy,
+) -> Result<Vec<GroupMember>, AutoShareError> {
+    if delta_bps == 0 {
+        return Ok(members);
+    }
+
+    match policy {
+        RebalancePolicy::FromMember(addr) | RebalancePolicy::ToMember(addr) => {
+            let mut found = false;
+            for i in 0..members.len() {
+                let mut m = members.get(i).unwrap();
+                if m.address == addr {
+                    let new_bps = (m.percentage as i64) + delta_bps;
+                    if new_bps <= 0 {
+                        return Err(AutoShareError::InvalidPercentage);
+                    }
+                    m.percentage = new_bps as u32;
+                    members.set(i, m);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err(AutoShareError::InvalidPercentage);
+            }
+        }
+        RebalancePolicy::Proportional => {
+            let mut total_current: u32 = 0;
+            for i in 0..members.len() {
+                total_current += members.get(i).unwrap().percentage;
+            }
+            if total_current == 0 {
+                return Err(AutoShareError::InvalidPercentage);
+            }
+
+            let target_total = (total_current as i64) + delta_bps;
+            if target_total <= 0 {
+                return Err(AutoShareError::InvalidPercentage);
+            }
+
+            let mut new_members = Vec::new(env);
+            let mut allocated: u32 = 0;
+
+            for i in 0..members.len() {
+                let mut m = members.get(i).unwrap();
+                let share =
+                    ((m.percentage as u64) * (target_total as u64)) / (total_current as u64);
+                if share == 0 {
+                    return Err(AutoShareError::InvalidPercentage);
+                }
+                m.percentage = share as u32;
+                allocated += m.percentage;
+                new_members.push_back(m);
+            }
+
+            let remainder = target_total - (allocated as i64);
+            if remainder > 0 {
+                let mut largest_share = 0;
+                let mut largest_idx = 0;
+                for i in 0..new_members.len() {
+                    let m = new_members.get(i).unwrap();
+                    if m.percentage > largest_share {
+                        largest_share = m.percentage;
+                        largest_idx = i;
+                    }
+                }
+
+                let mut largest_m = new_members.get(largest_idx).unwrap();
+                largest_m.percentage += remainder as u32;
+                new_members.set(largest_idx, largest_m);
+            }
+            members = new_members;
+        }
+    }
+
+    // Ensure no member has 0
+    for i in 0..members.len() {
+        let m = members.get(i).unwrap();
+        if m.percentage == 0 {
+            return Err(AutoShareError::InvalidPercentage);
+        }
+    }
+
+    Ok(members)
+}
 
 mod contract_impl {
     #![allow(missing_docs)]
@@ -35,10 +130,34 @@ mod contract_impl {
 
     #[contractimpl]
     impl AutoShareTrait for AutoShareContract {
+        /// Initializes the contract with an admin and stamps the initial schema version.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `admin`: Address granted administrator privileges.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::AlreadyInitialized`] if already initialized.
+        fn init(env: Env, admin: Address) -> Result<(), AutoShareError> {
+            if env.storage().instance().has(&DataKey::Admin) {
+                return Err(AutoShareError::AlreadyInitialized);
+            }
+
+            env.storage().instance().set(&DataKey::Admin, &admin);
+            env.storage()
+                .instance()
+                .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+            env.storage().instance().set(&DataKey::Paused, &false);
+
+            Ok(())
+        }
+
         /// Creates an empty AutoShare group.
         ///
-        /// The `creator` must authorize the call. The group is stored under `id`
-        /// and indexed under the creator's address.
+        /// The `creator` must authorize the call. The group is stored under `id`,
+        /// indexed under the creator's address, and added to the global group index.
         ///
         /// # Parameters
         ///
@@ -51,7 +170,8 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::GroupAlreadyExists`] when `id` is already stored.
+        /// Returns [`AutoShareError::MigrationRequired`] when an upgrade migration is pending,
+        /// or [`AutoShareError::GroupAlreadyExists`] when `id` is already stored.
         ///
         /// # Panics
         ///
@@ -64,6 +184,7 @@ mod contract_impl {
             usage_count: u32,
             payment_token: Address,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
             creator.require_auth();
 
             if env.storage().persistent().has(&DataKey::Group(id.clone())) {
@@ -77,6 +198,8 @@ mod contract_impl {
                 usage_count,
                 payment_token,
                 members: Vec::new(&env),
+                version: CURRENT_SCHEMA_VERSION,
+                group_version: 1,
             };
 
             env.storage()
@@ -91,6 +214,16 @@ mod contract_impl {
                 .unwrap_or(Vec::new(&env));
             ids.push_back(id.clone());
             env.storage().persistent().set(&key, &ids);
+
+            // Maintain global group index for enumeration and migrations
+            let all_groups_key = DataKey::AllGroups;
+            let mut all_ids: Vec<BytesN<32>> = env
+                .storage()
+                .persistent()
+                .get(&all_groups_key)
+                .unwrap_or(Vec::new(&env));
+            all_ids.push_back(id.clone());
+            env.storage().persistent().set(&all_groups_key, &all_ids);
 
             events::group_created(&env, &id, &creator);
             Ok(())
@@ -111,11 +244,10 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::GroupNotFound`],
+        /// Returns [`AutoShareError::MigrationRequired`], [`AutoShareError::GroupNotFound`],
         /// [`AutoShareError::Unauthorized`], [`AutoShareError::EmptyMembers`],
         /// [`AutoShareError::DuplicateMember`], or
-        /// [`AutoShareError::InvalidPercentage`] when the corresponding validation
-        /// fails.
+        /// [`AutoShareError::InvalidPercentage`] when validation fails.
         ///
         /// # Panics
         ///
@@ -125,8 +257,14 @@ mod contract_impl {
             id: BytesN<32>,
             caller: Address,
             new_members: Vec<GroupMember>,
+            expected_version: u32,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
+
             let mut details = validate_group_exists(&env, &id)?;
+            if details.group_version != expected_version {
+                return Err(AutoShareError::StaleGroupVersion);
+            }
 
             require_group_creator(&env, &details, &caller)?;
             validate_members_unique(&new_members)?;
@@ -134,11 +272,184 @@ mod contract_impl {
 
             let count = new_members.len();
             details.members = new_members;
+            details.group_version = details.group_version.checked_add(1).unwrap_or(1);
+            details.version = CURRENT_SCHEMA_VERSION;
             env.storage()
                 .persistent()
                 .set(&DataKey::Group(id.clone()), &details);
 
-            events::members_updated(&env, &id, count);
+            events::members_updated(&env, &id, count as u32);
+            Ok(())
+        }
+
+        fn add_member(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+            member: GroupMember,
+            policy: RebalancePolicy,
+            expected_version: u32,
+        ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
+
+            let mut details = validate_group_exists(&env, &id)?;
+            if details.group_version != expected_version {
+                return Err(AutoShareError::StaleGroupVersion);
+            }
+            require_group_creator(&env, &details, &caller)?;
+
+            if member.percentage == 0 {
+                return Err(AutoShareError::InvalidPercentage);
+            }
+
+            // Check if member already exists
+            for i in 0..details.members.len() {
+                let m = details.members.get(i).unwrap();
+                if m.address == member.address {
+                    return Err(AutoShareError::DuplicateMember);
+                }
+            }
+
+            // Rebalance existing members to make room for `member.percentage`
+            let mut members = details.members;
+            if members.len() == 0 {
+                // adding first member must have exactly 10_000
+                if member.percentage != 10_000 {
+                    return Err(AutoShareError::InvalidPercentage);
+                }
+                members.push_back(member.clone());
+            } else {
+                members = apply_rebalance(&env, members, -(member.percentage as i64), policy)?;
+                members.push_back(member.clone());
+            }
+
+            details.members = members;
+            details.group_version = details.group_version.checked_add(1).unwrap_or(1);
+            details.version = CURRENT_SCHEMA_VERSION;
+            env.storage()
+                .persistent()
+                .set(&DataKey::Group(id.clone()), &details);
+
+            events::member_added(&env, &id, &member.address, 0, member.percentage);
+            Ok(())
+        }
+
+        fn remove_member(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+            address: Address,
+            policy: RebalancePolicy,
+            expected_version: u32,
+        ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
+
+            let mut details = validate_group_exists(&env, &id)?;
+            if details.group_version != expected_version {
+                return Err(AutoShareError::StaleGroupVersion);
+            }
+            require_group_creator(&env, &details, &caller)?;
+
+            let mut members = details.members;
+            let mut removed_idx = None;
+            let mut freed_bps = 0;
+            for i in 0..members.len() {
+                let m = members.get(i).unwrap();
+                if m.address == address {
+                    removed_idx = Some(i);
+                    freed_bps = m.percentage;
+                    break;
+                }
+            }
+
+            let idx = removed_idx.ok_or(AutoShareError::MemberNotFound)?;
+            members.remove(idx);
+
+            if members.len() == 0 {
+                return Err(AutoShareError::EmptyMembers);
+            }
+
+            members = apply_rebalance(&env, members, freed_bps as i64, policy)?;
+
+            details.members = members;
+            details.group_version = details.group_version.checked_add(1).unwrap_or(1);
+            details.version = CURRENT_SCHEMA_VERSION;
+            env.storage()
+                .persistent()
+                .set(&DataKey::Group(id.clone()), &details);
+
+            events::member_removed(&env, &id, &address, freed_bps, 0);
+            Ok(())
+        }
+
+        fn set_member_percentage(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+            address: Address,
+            new_bps: u32,
+            policy: RebalancePolicy,
+            expected_version: u32,
+        ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
+
+            let mut details = validate_group_exists(&env, &id)?;
+            if details.group_version != expected_version {
+                return Err(AutoShareError::StaleGroupVersion);
+            }
+            require_group_creator(&env, &details, &caller)?;
+
+            if new_bps == 0 {
+                return Err(AutoShareError::InvalidPercentage);
+            }
+
+            let mut members = details.members;
+            let mut target_idx = None;
+            let mut old_bps = 0;
+            let mut target_m = None;
+            for i in 0..members.len() {
+                let m = members.get(i).unwrap();
+                if m.address == address {
+                    target_idx = Some(i);
+                    old_bps = m.percentage;
+                    target_m = Some(m);
+                    break;
+                }
+            }
+
+            let idx = target_idx.ok_or(AutoShareError::MemberNotFound)?;
+            if old_bps == new_bps {
+                return Ok(()); // No change
+            }
+            let mut t = target_m.unwrap();
+            t.percentage = new_bps;
+
+            let delta = (old_bps as i64) - (new_bps as i64);
+
+            members.remove(idx); // temporarly remove to rebalance others
+
+            if members.len() == 0 {
+                // If only 1 member, percentage must be 10_000
+                if new_bps != 10_000 {
+                    return Err(AutoShareError::InvalidPercentage);
+                }
+            } else {
+                members = apply_rebalance(&env, members, delta, policy)?;
+            }
+
+            // add back the updated target member (order might change, let's append for simplicity, or re-insert)
+            // for determinism we might want to preserve the order, but `members.insert` is available in sdk?
+            // yes, Vec::insert(u32, T) is available.
+            members.insert(idx, t);
+
+            details.members = members;
+            details.group_version = details.group_version.checked_add(1).unwrap_or(1);
+            details.version = CURRENT_SCHEMA_VERSION;
+            env.storage()
+                .persistent()
+                .set(&DataKey::Group(id.clone()), &details);
+
+            events::member_percentage_updated(&env, &id, &address, old_bps, new_bps);
             Ok(())
         }
 
@@ -165,7 +476,7 @@ mod contract_impl {
 
             let mut result: Vec<AutoShareDetails> = Vec::new(&env);
             for id in ids.iter() {
-                if let Some(details) = env.storage().persistent().get(&DataKey::Group(id)) {
+                if let Ok(details) = validate_group_exists(&env, &id) {
                     result.push_back(details);
                 }
             }
@@ -187,7 +498,7 @@ mod contract_impl {
         ///
         /// # Errors
         ///
-        /// Returns [`AutoShareError::InvalidAmount`],
+        /// Returns [`AutoShareError::MigrationRequired`], [`AutoShareError::InvalidAmount`],
         /// [`AutoShareError::GroupNotFound`], [`AutoShareError::EmptyMembers`], or
         /// [`AutoShareError::InsufficientBalance`] when validation fails.
         ///
@@ -202,6 +513,7 @@ mod contract_impl {
             from: Address,
             amount: i128,
         ) -> Result<(), AutoShareError> {
+            require_migration_current(&env)?;
             from.require_auth();
 
             validate_amount(amount)?;
@@ -245,11 +557,7 @@ mod contract_impl {
         /// Panics when `group_id` is not stored or its persisted member percentages
         /// are invalid.
         fn get_member_shares(env: Env, group_id: BytesN<32>, total_amount: i128) -> Vec<i128> {
-            let details: AutoShareDetails = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Group(group_id))
-                .expect("group not found");
+            let details = validate_group_exists(&env, &group_id).expect("group not found");
 
             base::utils::distribute_amounts(&env, total_amount, &details.members)
                 .expect("invalid group configuration")
@@ -263,7 +571,12 @@ mod contract_impl {
         ///
         /// Panics if multiplying `total` by `percentage` overflows `i128`.
         fn get_calculated_share(_env: Env, total: i128, percentage: u32) -> i128 {
-            base::utils::calculate_share(total, percentage)
+            // `calculate_share` returns a typed error now, but this entrypoint's
+            // trait signature is still `-> i128`, so an out-of-range preview
+            // aborts exactly as the doc comment above says. Widening it to
+            // `Result<i128, AutoShareError>` is an ABI change and is left to
+            // whoever owns that refactor.
+            base::utils::calculate_share(total, percentage).expect("overflow in calculate_share")
         }
 
         /// Returns the sum of all member percentages for a group.
@@ -274,17 +587,306 @@ mod contract_impl {
         ///
         /// Panics when `group_id` is not stored.
         fn get_total_percentage(env: Env, group_id: BytesN<32>) -> u32 {
-            let details: AutoShareDetails = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Group(group_id))
-                .expect("group not found");
+            let details = validate_group_exists(&env, &group_id).expect("group not found");
 
             let mut sum: u32 = 0;
             for member in details.members.iter() {
                 sum = sum.saturating_add(member.percentage);
             }
             sum
+        }
+
+        /// Upgrades the contract WASM executable to a new hash.
+        ///
+        /// The caller must be the contract admin, and the contract must be paused.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the upgrade.
+        /// - `new_wasm_hash`: 32-byte hash of the newly installed WASM.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::ContractNotPaused`] if the contract is active.
+        fn upgrade(
+            env: Env,
+            caller: Address,
+            new_wasm_hash: BytesN<32>,
+        ) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            require_paused(&env)?;
+
+            env.deployer()
+                .update_current_contract_wasm(new_wasm_hash.clone());
+            events::upgraded(&env, &new_wasm_hash);
+            Ok(())
+        }
+
+        /// Performs batched migration of stored groups to [`CURRENT_SCHEMA_VERSION`].
+        ///
+        /// The caller must be the contract admin. Processes up to `limit` groups
+        /// per call using a persisted cursor.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `caller`: Admin address authorizing the migration.
+        /// - `limit`: Maximum number of groups to migrate in this transaction.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin,
+        /// or [`AutoShareError::NothingToMigrate`] if already at the current schema version.
+        fn migrate(
+            env: Env,
+            caller: Address,
+            limit: u32,
+        ) -> Result<MigrationProgress, AutoShareError> {
+            require_admin(&env, &caller)?;
+
+            let current_schema: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0);
+
+            if current_schema == CURRENT_SCHEMA_VERSION {
+                return Err(AutoShareError::NothingToMigrate);
+            }
+
+            let all_ids: Vec<BytesN<32>> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::AllGroups)
+                .unwrap_or(Vec::new(&env));
+
+            let total_groups = all_ids.len();
+            let cursor: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::MigrationCursor)
+                .unwrap_or(0);
+
+            if total_groups == 0 || cursor >= total_groups {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+                events::migrated(&env, 0, 0);
+                return Ok(MigrationProgress {
+                    migrated: 0,
+                    remaining: 0,
+                    done: true,
+                });
+            }
+
+            let end = (cursor + limit).min(total_groups);
+            let mut count: u32 = 0;
+
+            use soroban_sdk::{Map, TryFromVal, Val};
+
+            for i in cursor..end {
+                let id = all_ids.get(i).unwrap();
+                let key = DataKey::Group(id.clone());
+
+                if let Some(val) = env.storage().persistent().get::<DataKey, Val>(&key) {
+                    if let Ok(map) = Map::<Val, Val>::try_from_val(&env, &val) {
+                        if map.len() == 6 {
+                            if let Ok(v1) = AutoShareDetailsV1::try_from_val(&env, &val) {
+                                let v3 = AutoShareDetails {
+                                    id: v1.id,
+                                    name: v1.name,
+                                    creator: v1.creator,
+                                    usage_count: v1.usage_count,
+                                    payment_token: v1.payment_token,
+                                    members: v1.members,
+                                    version: CURRENT_SCHEMA_VERSION,
+                                    group_version: 1,
+                                };
+                                env.storage().persistent().set(&key, &v3);
+                            }
+                        } else if map.len() == 7 {
+                            if let Ok(v2) = AutoShareDetailsV2::try_from_val(&env, &val) {
+                                let v3 = AutoShareDetails {
+                                    id: v2.id,
+                                    name: v2.name,
+                                    creator: v2.creator,
+                                    usage_count: v2.usage_count,
+                                    payment_token: v2.payment_token,
+                                    members: v2.members,
+                                    version: CURRENT_SCHEMA_VERSION,
+                                    group_version: 1,
+                                };
+                                env.storage().persistent().set(&key, &v3);
+                            }
+                        } else if map.len() == 8 {
+                            if let Ok(mut v3) = AutoShareDetails::try_from_val(&env, &val) {
+                                if v3.version != CURRENT_SCHEMA_VERSION {
+                                    v3.version = CURRENT_SCHEMA_VERSION;
+                                    env.storage().persistent().set(&key, &v3);
+                                }
+                            }
+                        }
+                    }
+                }
+                count += 1;
+            }
+
+            let new_cursor = end;
+            let remaining = total_groups - new_cursor;
+            let done = remaining == 0;
+
+            if done {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::SchemaVersion, &CURRENT_SCHEMA_VERSION);
+                env.storage().instance().remove(&DataKey::MigrationCursor);
+            } else {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::MigrationCursor, &new_cursor);
+            }
+
+            events::migrated(&env, count, remaining);
+
+            Ok(MigrationProgress {
+                migrated: count,
+                remaining,
+                done,
+            })
+        }
+
+        /// Returns the current schema version stamped in contract instance storage.
+        fn schema_version(env: Env) -> u32 {
+            env.storage()
+                .instance()
+                .get(&DataKey::SchemaVersion)
+                .unwrap_or(0)
+        }
+
+        /// Pauses the contract, allowing administrative maintenance and upgrades.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn pause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &true);
+            events::paused(&env);
+            Ok(())
+        }
+
+        /// Unpauses the contract, resuming normal operation.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::Unauthorized`] if `caller` is not admin.
+        fn unpause(env: Env, caller: Address) -> Result<(), AutoShareError> {
+            require_admin(&env, &caller)?;
+            env.storage().instance().set(&DataKey::Paused, &false);
+            events::unpaused(&env);
+            Ok(())
+        }
+
+        /// Takes custody of `amount` and credits it across the group's members.
+        ///
+        /// The pull-payment counterpart to [`Self::distribute`]. The tokens move
+        /// in a single transfer from `from` to this contract, and each member is
+        /// credited their basis-point share using the same floor-plus-dust math
+        /// as `distribute`, so no stroops are lost across repeated deposits.
+        ///
+        /// Credits are a **snapshot** of the member set at deposit time. A later
+        /// `update_members` never moves an already-credited balance, and a member
+        /// removed from the group keeps whatever they had accrued.
+        ///
+        /// Every write extends the touched entry's TTL — see
+        /// [`base::escrow`] for the policy and its rent cost.
+        ///
+        /// # Parameters
+        ///
+        /// - `env`: Soroban execution environment.
+        /// - `id`: Identifier of the group to credit.
+        /// - `from`: Token holder funding the escrow.
+        /// - `amount`: Positive token amount to take into custody.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::InvalidAmount`],
+        /// [`AutoShareError::GroupNotFound`], [`AutoShareError::EmptyMembers`],
+        /// [`AutoShareError::InsufficientBalance`], or
+        /// [`AutoShareError::InvalidPercentage`]. No tokens move unless every
+        /// validation passes.
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `from` does not authorize the call or if the token
+        /// contract rejects the transfer.
+        fn deposit(
+            env: Env,
+            id: BytesN<32>,
+            from: Address,
+            amount: i128,
+        ) -> Result<(), AutoShareError> {
+            base::escrow::deposit(&env, &id, &from, amount)
+        }
+
+        /// Pays `member`'s full accrued escrow balance out to themselves.
+        ///
+        /// Returns the amount transferred. The member's entry is cleared before
+        /// the token transfer, so a reentrant token contract observes a zero
+        /// balance and cannot be paid twice.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`AutoShareError::GroupNotFound`],
+        /// [`AutoShareError::NothingToClaim`] when a current member has no
+        /// balance left (a second claim included), or
+        /// [`AutoShareError::MemberNotFound`] when the address holds no balance
+        /// and is not a member. Neither error moves tokens.
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `member` does not authorize the call.
+        fn claim(env: Env, id: BytesN<32>, member: Address) -> Result<i128, AutoShareError> {
+            base::escrow::claim(&env, &id, &member)
+        }
+
+        /// Pays `member`'s full accrued escrow balance out to `to`.
+        ///
+        /// Identical to [`Self::claim`] except for the destination. Only
+        /// `member` authorizes the call; `to` is an arbitrary payout address.
+        ///
+        /// # Errors
+        ///
+        /// See [`Self::claim`].
+        ///
+        /// # Panics
+        ///
+        /// Soroban aborts if `member` does not authorize the call.
+        fn claim_to(
+            env: Env,
+            id: BytesN<32>,
+            member: Address,
+            to: Address,
+        ) -> Result<i128, AutoShareError> {
+            base::escrow::claim_to(&env, &id, &member, &to)
+        }
+
+        /// Returns the amount `member` may currently claim from group `id`.
+        ///
+        /// Returns `0` for an unknown group, an uncredited address, or a member
+        /// who has already claimed.
+        fn claimable_balance(env: Env, id: BytesN<32>, member: Address) -> i128 {
+            base::escrow::claimable_balance(&env, &id, &member)
+        }
+
+        /// Returns the total amount held in escrow for group `id`.
+        ///
+        /// Always equal to the sum of the group's outstanding claimable balances.
+        fn total_escrowed(env: Env, id: BytesN<32>) -> i128 {
+            base::escrow::total_escrowed(&env, &id)
         }
     }
 }

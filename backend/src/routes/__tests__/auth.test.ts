@@ -1,209 +1,292 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { after, beforeEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import request from 'supertest';
+import { Keypair, Transaction, TransactionBuilder, WebAuth } from '@stellar/stellar-sdk';
 import { app } from '../../index.js';
-import { challengesService } from '../../services/challenges.js';
-import { stellarSignatureVerifier } from '../../utils/stellar.js';
+import { authConfig } from '../../config/auth.js';
+import { challengesService, type Challenge } from '../../services/challenges.js';
+import { accountAuthService } from '../../services/sep10.js';
+import { sessionsService } from '../../services/sessions.js';
 import { verifyToken } from '../../utils/jwt.js';
 
-process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
+const client = Keypair.random();
+const secondSigner = Keypair.random();
 
-const address1 = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU';
-const address2 = 'GAYO55R3JM3OHUB7W52QO7P6CDH5P3WTAF4V6QG4EIVTT6OJZIMIC75W';
+function signChallenge(xdr: string, ...signers: Keypair[]): string {
+  const tx = TransactionBuilder.fromXDR(xdr, authConfig().networkPassphrase);
+  tx.sign(...signers);
+  return tx.toXDR();
+}
+
+function nonceFrom(xdr: string): string {
+  const tx = TransactionBuilder.fromXDR(xdr, authConfig().networkPassphrase);
+  const operation = tx.operations[0];
+  assert.ok(operation?.type === 'manageData' && operation.value);
+  return operation.value.toString('utf8');
+}
+
+function cookieFrom(res: request.Response): string {
+  const setCookie = res.headers['set-cookie'];
+  assert.ok(setCookie);
+  const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  return raw.split(';', 1)[0];
+}
+
+function fullCookieFrom(res: request.Response): string {
+  const setCookie = res.headers['set-cookie'];
+  assert.ok(setCookie);
+  return Array.isArray(setCookie) ? setCookie[0] : setCookie;
+}
+
+function mockAccount(
+  mediumThreshold = 1,
+  signers = [{ key: client.publicKey(), weight: 1, type: 'ed25519_public_key' }]
+): void {
+  mock.method(accountAuthService, 'load', async () => ({ mediumThreshold, signers }));
+}
+
+async function login(): Promise<{ accessToken: string; cookie: string }> {
+  const challenge = await request(app)
+    .post('/auth/challenge')
+    .send({ address: client.publicKey() })
+    .expect(200);
+  const signed = signChallenge(challenge.body.data.transaction, client);
+  const verified = await request(app)
+    .post('/auth/verify')
+    .send({ transaction: signed })
+    .expect(200);
+  return { accessToken: verified.body.data.accessToken, cookie: cookieFrom(verified) };
+}
 
 beforeEach(async () => {
   mock.restoreAll();
   await challengesService.clear();
+  await sessionsService.clear();
 });
 
-describe('POST /auth/challenge', () => {
-  it('issues a nonce and message for a valid address', async () => {
-    const res = await request(app).post('/auth/challenge').send({ address: address1 }).expect(200);
+after(() => mock.restoreAll());
 
-    assert.strictEqual(res.body.success, true);
-    assert.strictEqual(res.body.data.address, address1);
-    assert.strictEqual(typeof res.body.data.nonce, 'string');
-    assert.ok(res.body.data.nonce.length > 0);
-    assert.ok(res.body.data.message.includes(address1));
-    assert.ok(res.body.data.message.includes(res.body.data.nonce));
-    assert.strictEqual(typeof res.body.data.expiresAt, 'string');
-  });
-
-  it('issues a distinct nonce on each call', async () => {
-    const res1 = await request(app).post('/auth/challenge').send({ address: address1 });
-    const res2 = await request(app).post('/auth/challenge').send({ address: address1 });
-
-    assert.notStrictEqual(res1.body.data.nonce, res2.body.data.nonce);
-  });
-
-  it('rejects a missing address', async () => {
-    const res = await request(app).post('/auth/challenge').send({}).expect(400);
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
-  });
-
-  it('rejects a malformed address', async () => {
+describe('SEP-10 authentication', () => {
+  it('issues a standard 300-second SEP-10 challenge XDR', async () => {
     const res = await request(app)
       .post('/auth/challenge')
-      .send({ address: 'not-a-stellar-address' })
-      .expect(400);
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+      .send({ address: client.publicKey() })
+      .expect(200);
+    const tx = TransactionBuilder.fromXDR(
+      res.body.data.transaction,
+      authConfig().networkPassphrase
+    );
+
+    assert.ok(tx instanceof Transaction);
+    assert.equal(tx.sequence, '0');
+    assert.equal(tx.source, authConfig().signingKeypair.publicKey());
+    assert.equal(tx.operations[0]?.type, 'manageData');
+    assert.equal(tx.operations[0]?.name, `${authConfig().homeDomain} auth`);
+    assert.equal(Buffer.from(nonceFrom(res.body.data.transaction), 'base64').length, 48);
+    assert.equal(tx.operations[1]?.type, 'manageData');
+    assert.equal(tx.operations[1]?.name, 'web_auth_domain');
+    assert.equal(Number(tx.timeBounds!.maxTime) - Number(tx.timeBounds!.minTime), 300);
+  });
+
+  it('verifies the client signature and issues a 15-minute access token plus secure cookie', async () => {
+    mockAccount();
+    const result = await login();
+    const decoded = verifyToken(result.accessToken);
+    assert.equal(decoded.sub, client.publicKey());
+    assert.ok(decoded.sid);
+    assert.equal(decoded.exp! - decoded.iat!, 900);
+    const issued = await sessionsService.create(client.publicKey());
+    const refreshed = await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', `paymesh_refresh=${issued.refreshToken}`)
+      .expect(200);
+    const setCookie = fullCookieFrom(refreshed);
+    assert.match(setCookie, /^paymesh_refresh=/);
+    assert.match(setCookie, /HttpOnly/i);
+    assert.match(setCookie, /Secure/i);
+    assert.match(setCookie, /SameSite=Strict/i);
+  });
+
+  it('rejects tampered XDR', async () => {
+    mockAccount();
+    const issued = await request(app).post('/auth/challenge').send({ address: client.publicKey() });
+    const signed = signChallenge(issued.body.data.transaction, client);
+    const bytes = Buffer.from(signed, 'base64');
+    bytes[Math.floor(bytes.length / 2)] ^= 1;
+    await request(app)
+      .post('/auth/verify')
+      .send({ transaction: bytes.toString('base64') })
+      .expect(401);
+  });
+
+  it('rejects a challenge signed by the wrong server key', async () => {
+    const attacker = Keypair.random();
+    const xdr = WebAuth.buildChallengeTx(
+      attacker,
+      client.publicKey(),
+      authConfig().homeDomain,
+      300,
+      authConfig().networkPassphrase,
+      authConfig().webAuthDomain
+    );
+    const tx = TransactionBuilder.fromXDR(xdr, authConfig().networkPassphrase);
+    const fake: Challenge = {
+      id: crypto.randomUUID(),
+      nonce: nonceFrom(xdr),
+      address: client.publicKey(),
+      transaction: xdr,
+      transactionHash: Buffer.from(tx.hash()),
+      expiresAt: new Date(Date.now() + 300_000),
+      usedAt: null,
+    };
+    mock.method(challengesService, 'find', async () => fake);
+    await request(app)
+      .post('/auth/verify')
+      .send({ transaction: signChallenge(xdr, client) })
+      .expect(401);
+  });
+
+  it('rejects expired time bounds', async () => {
+    const xdr = WebAuth.buildChallengeTx(
+      authConfig().signingKeypair,
+      client.publicKey(),
+      authConfig().homeDomain,
+      300,
+      authConfig().networkPassphrase,
+      authConfig().webAuthDomain
+    );
+    const tx = TransactionBuilder.fromXDR(xdr, authConfig().networkPassphrase);
+    const fake: Challenge = {
+      id: crypto.randomUUID(),
+      nonce: nonceFrom(xdr),
+      address: client.publicKey(),
+      transaction: xdr,
+      transactionHash: Buffer.from(tx.hash()),
+      expiresAt: new Date(Date.now() + 86_400_000),
+      usedAt: null,
+    };
+    mock.method(challengesService, 'find', async () => fake);
+    mockAccount();
+    const future = Date.now() + 3_600_000;
+    mock.method(Date, 'now', () => future);
+    await request(app)
+      .post('/auth/verify')
+      .send({ transaction: signChallenge(xdr, client) })
+      .expect(401);
+  });
+
+  it('rejects a missing client signature', async () => {
+    mockAccount();
+    const issued = await request(app).post('/auth/challenge').send({ address: client.publicKey() });
+    await request(app)
+      .post('/auth/verify')
+      .send({ transaction: issued.body.data.transaction })
+      .expect(401);
+  });
+
+  it('rejects multisig weight below the medium threshold', async () => {
+    mockAccount(2, [
+      { key: client.publicKey(), weight: 1, type: 'ed25519_public_key' },
+      { key: secondSigner.publicKey(), weight: 1, type: 'ed25519_public_key' },
+    ]);
+    const issued = await request(app).post('/auth/challenge').send({ address: client.publicKey() });
+    await request(app)
+      .post('/auth/verify')
+      .send({ transaction: signChallenge(issued.body.data.transaction, client) })
+      .expect(401);
+  });
+
+  it('rejects nonce replay', async () => {
+    mockAccount();
+    const issued = await request(app).post('/auth/challenge').send({ address: client.publicKey() });
+    const signed = signChallenge(issued.body.data.transaction, client);
+    await request(app).post('/auth/verify').send({ transaction: signed }).expect(200);
+    await request(app).post('/auth/verify').send({ transaction: signed }).expect(401);
   });
 });
 
-describe('POST /auth/verify', () => {
-  it('issues a JWT when the signature is valid', async () => {
-    const verifyMock = mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: address1 });
-    const { nonce } = challengeRes.body.data;
-
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: address1, nonce, signature: 'ZmFrZS1zaWduYXR1cmU=' })
+describe('refresh sessions and revocation', () => {
+  it('rotates a refresh token successfully', async () => {
+    mockAccount();
+    const first = await login();
+    const refreshed = await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', first.cookie)
       .expect(200);
-
-    assert.strictEqual(res.body.success, true);
-    assert.strictEqual(res.body.data.address, address1);
-    assert.strictEqual(typeof res.body.data.token, 'string');
-    assert.strictEqual(verifyMock.mock.calls.length, 1);
-
-    const decoded = verifyToken(res.body.data.token);
-    assert.strictEqual(decoded.sub, address1);
-    assert.strictEqual(decoded.address, address1);
-    assert.strictEqual(typeof decoded.exp, 'number');
+    assert.notEqual(cookieFrom(refreshed), first.cookie);
+    assert.equal(verifyToken(refreshed.body.data.accessToken).sub, client.publicKey());
   });
 
-  it('rejects an invalid signature', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => false);
-
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: address1 });
-    const { nonce } = challengeRes.body.data;
-
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: address1, nonce, signature: 'YmFkLXNpZ25hdHVyZQ==' })
+  it('detects reuse and revokes the entire token family', async () => {
+    mockAccount();
+    const first = await login();
+    const rotated = await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', first.cookie)
+      .expect(200);
+    const nextCookie = cookieFrom(rotated);
+    await request(app).post('/auth/refresh').set('Cookie', first.cookie).expect(401);
+    await request(app).post('/auth/refresh').set('Cookie', nextCookie).expect(401);
+    await request(app)
+      .get('/api/groups')
+      .set('Authorization', `Bearer ${rotated.body.data.accessToken}`)
       .expect(401);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
   });
 
-  it('rejects reuse of an already-consumed nonce (single-use)', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: address1 });
-    const { nonce } = challengeRes.body.data;
-    const payload = { address: address1, nonce, signature: 'ZmFrZS1zaWduYXR1cmU=' };
-
-    await request(app).post('/auth/verify').send(payload).expect(200);
-    const res = await request(app).post('/auth/verify').send(payload).expect(401);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
-  });
-
-  it('rejects an unknown nonce', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: address1, nonce: 'does-not-exist', signature: 'ZmFrZQ==' })
+  it('rejects an expired refresh token', async () => {
+    const session = await sessionsService.create(client.publicKey());
+    session.expiresAt.setTime(Date.now() - 1);
+    await request(app)
+      .post('/auth/refresh')
+      .set('Cookie', `paymesh_refresh=${session.refreshToken}`)
       .expect(401);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
   });
 
-  it('rejects a nonce issued for a different address', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: address1 });
-    const { nonce } = challengeRes.body.data;
-
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: address2, nonce, signature: 'ZmFrZQ==' })
+  it('logout revokes the session immediately', async () => {
+    mockAccount();
+    const credentials = await login();
+    await request(app).post('/auth/logout').set('Cookie', credentials.cookie).expect(200);
+    await request(app)
+      .get('/api/groups')
+      .set('Authorization', `Bearer ${credentials.accessToken}`)
       .expect(401);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
   });
 
-  it('rejects an expired challenge', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    // create() returns the same object reference held internally, so mutating
-    // expiresAt here simulates time passing without needing fake timers.
-    const challenge = await challengesService.create(address1);
-    challenge.expiresAt = new Date(Date.now() - 1000);
-
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: address1, nonce: challenge.nonce, signature: 'ZmFrZQ==' })
+  it('logout-all revokes every session for the wallet', async () => {
+    mockAccount();
+    const first = await login();
+    await challengesService.clear();
+    const second = await login();
+    await request(app)
+      .post('/auth/logout-all')
+      .set('Authorization', `Bearer ${first.accessToken}`)
+      .expect(200);
+    await request(app)
+      .get('/api/groups')
+      .set('Authorization', `Bearer ${second.accessToken}`)
       .expect(401);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
-  });
-
-  it('rejects missing fields with 400', async () => {
-    const res = await request(app).post('/auth/verify').send({ address: address1 }).expect(400);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
-  });
-
-  it('rejects a malformed address with 400', async () => {
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: 'bad-address', nonce: 'x', signature: 'ZmFrZQ==' })
-      .expect(400);
-
-    assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 });
 
-describe('requireAuth middleware (via a protected route)', () => {
-  it('rejects requests with no Authorization header', async () => {
-    const res = await request(app).get('/api/groups').expect(401);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
-  });
-
-  it('rejects a malformed Authorization header', async () => {
-    const res = await request(app)
-      .get('/api/groups')
-      .set('Authorization', 'NotBearer sometoken')
-      .expect(401);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
-  });
-
-  it('rejects an invalid token', async () => {
-    const res = await request(app)
-      .get('/api/groups')
-      .set('Authorization', 'Bearer not-a-real-jwt')
-      .expect(401);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
-  });
-
-  it('accepts a valid token end-to-end from /auth/verify and populates req.user', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
-
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: address1 });
-    const { nonce } = challengeRes.body.data;
-    const verifyRes = await request(app)
-      .post('/auth/verify')
-      .send({ address: address1, nonce, signature: 'ZmFrZQ==' })
-      .expect(200);
-
-    const res = await request(app)
-      .get('/api/groups')
-      .set('Authorization', `Bearer ${verifyRes.body.data.token}`)
-      .expect(200);
-
-    assert.strictEqual(res.body.success, true);
+describe('startup security', () => {
+  it('refuses to boot with a short JWT_SECRET outside test', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '--eval', "import('./dist/index.js')"],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          JWT_SECRET: 'short',
+          STELLAR_SIGNING_SECRET: authConfig().signingKeypair.secret(),
+        },
+      }
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /JWT_SECRET must be set and contain at least 32 bytes/);
   });
 });

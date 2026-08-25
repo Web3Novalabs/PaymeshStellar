@@ -27,8 +27,10 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install wasm32 target
-        run: rustup target add wasm32-unknown-unknown
+      - name: Install wasm32 targets
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32v1-none
 
       - name: Install Stellar CLI
         run: |
@@ -60,9 +62,23 @@ jobs:
         working-directory: contract
         run: cargo clippy --all --all-targets -- -D warnings
 
-      - name: Build
+      - name: Build (native)
         working-directory: contract
         run: cargo build
+
+      # `stellar contract build` emits wasm32v1-none only on newer CLIs; the one
+      # pinned above still targets wasm32-unknown-unknown, so the verify step
+      # below never found its artifact. Building through cargo with the target
+      # the Makefile already uses makes the output path correct by construction
+      # and drops the dependency on the pinned CLI version.
+      - name: Build wasm (wasm32v1-none, release)
+        working-directory: contract
+        run: cargo build --target wasm32v1-none --release
+
+      - name: Verify wasm artifact exists
+        working-directory: contract
+        run: |
+          ls -lh target/wasm32v1-none/release/*.wasm
 
   test:
     runs-on: ubuntu-latest
@@ -72,8 +88,10 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install wasm32 target
-        run: rustup target add wasm32-unknown-unknown
+      - name: Install wasm32 targets
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32v1-none
 
       - name: Install Stellar CLI
         run: |
@@ -97,6 +115,20 @@ jobs:
           path: contract/target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run tests
+      - name: Run unit + integration tests
         working-directory: contract
         run: cargo test
+
+      - name: Run property-based tests (min 256 cases each)
+        working-directory: contract
+        env:
+          PROPTEST_CASES: 256
+        run: cargo test prop_ -- --test-threads=1
+
+      - name: Upload proptest regression seeds on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proptest-regressions
+          path: contract/proptest-regressions/
+          if-no-files-found: ignore
