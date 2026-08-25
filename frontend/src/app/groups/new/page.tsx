@@ -1,12 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import GroupWizard, { WizardState } from '@/components/GroupWizard';
-import MemberEditor from '@/components/MemberEditor';
-import Allocator from '@/components/Allocator';
-import SharePreview from '@/components/SharePreview';
-import { validateAllocation, MemberAllocation } from '@/lib/utils/allocation';
 
 export default function NewGroupPage() {
   const router = useRouter();
@@ -18,18 +14,6 @@ export default function NewGroupPage() {
     setSubmitError(null);
 
     try {
-      // Prepare the data for submission
-      const groupData = {
-        name: state.details.name,
-        paymentToken: state.details.paymentToken,
-        usageCount: state.details.usageCount,
-        members: state.members.map((m) => ({
-          address: m.address,
-          name: m.name,
-          percentage: m.basisPoints,
-        })),
-      };
-
       // TODO: Replace with actual API call
       // const response = await fetch('/api/groups', {
       //   method: 'POST',
@@ -73,7 +57,9 @@ export default function NewGroupPage() {
         </div>
       )}
 
-      <GroupWizard onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      <Suspense fallback={<div>Loading wizard...</div>}>
+        <GroupWizard onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      </Suspense>
     </div>
   );
 }
