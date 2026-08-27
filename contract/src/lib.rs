@@ -207,6 +207,10 @@ mod contract_impl {
         /// The `creator` must authorize the call. The group is stored under `id`,
         /// indexed under the creator's address, and added to the global group index.
         ///
+        /// This is the group-creation entrypoint: the caller supplies a unique
+        /// `id` up front (rather than the contract generating one), so `create`
+        /// rejects a reused `id` instead of returning a freshly minted one.
+        ///
         /// # Parameters
         ///
         /// - `env`: Soroban execution environment.
