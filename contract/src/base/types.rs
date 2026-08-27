@@ -25,7 +25,38 @@ pub const MAX_CATCHUP: u32 = 10;
 
 #[contracttype]
 #[derive(Debug, PartialEq, Clone)]
+/// Core payroll group data structure.
+/// Represents a group of members sharing token distributions.
+pub struct Group {
+    /// Unique 32-byte group identifier.
+    pub id: BytesN<32>,
+    /// Address authorized to update the member list and group settings.
+    pub creator: Address,
+    /// Token contract address used for group distributions.
+    pub token: Address,
+    /// Unix timestamp when the group was created.
+    pub created_at: u64,
+    /// Current number of members in the group.
+    pub member_count: u32,
+}
+
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+/// Individual member data (address and share percentage).
+/// Represents a payroll group member with their distribution share.
+pub struct Member {
+    /// Account address that receives this member's token share.
+    pub address: Address,
+    /// Distribution percentage in basis points, where `10_000` equals 100%.
+    pub percentage: u32,
+    /// Unix timestamp when this member joined the group.
+    pub joined_at: u64,
+}
+
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
 /// A recipient and their configured share of a group distribution.
+/// Combines member address, name, and share percentage.
 pub struct GroupMember {
     /// Account that receives this member's token share.
     pub address: Address,
@@ -33,6 +64,8 @@ pub struct GroupMember {
     pub name: String,
     /// Distribution percentage in basis points, where `10_000` equals 100%.
     pub percentage: u32,
+    /// Unix timestamp when this member joined the group.
+    pub joined_at: u64,
 }
 
 #[contracttype]

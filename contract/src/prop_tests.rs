@@ -26,11 +26,13 @@ mod distribution_props {
 
     fn make_members(env: &Env, bps: &StdVec<u32>) -> soroban_sdk::Vec<GroupMember> {
         let mut members = soroban_sdk::Vec::new(env);
+        let joined_at = env.ledger().timestamp();
         for (i, &pct) in bps.iter().enumerate() {
             members.push_back(GroupMember {
                 address: Address::generate(env),
                 name: String::from_str(env, if i == 0 { "m0" } else { "mx" }),
                 percentage: pct,
+                joined_at,
             });
         }
         members
