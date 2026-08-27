@@ -55,6 +55,7 @@ fn setup_group_with_members(
 
     let mut members = Vec::new(env);
     let mut addresses = Vec::new(env);
+    let joined_at = env.ledger().timestamp();
     for &pct in percentages {
         let addr = Address::generate(env);
         addresses.push_back(addr.clone());
@@ -62,6 +63,7 @@ fn setup_group_with_members(
             address: addr,
             name: String::from_str(env, "Member"),
             percentage: pct,
+            joined_at,
         });
     }
 
@@ -99,6 +101,7 @@ fn setup_env_with_group(
     if num_members > 0 {
         let pct_per_member = 10000 / num_members;
         let mut total_pct = 0;
+        let joined_at = env.ledger().timestamp();
         for i in 0..num_members {
             let pct = if i == num_members - 1 {
                 10000 - total_pct
@@ -111,6 +114,7 @@ fn setup_env_with_group(
                 address: addr,
                 name: String::from_str(env, "Member"),
                 percentage: pct,
+                joined_at,
             });
         }
         client.update_members(&id, &creator, &members, &1);
@@ -155,6 +159,7 @@ fn test_update_members() {
 
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
+    let joined_at = env.ledger().timestamp();
 
     let members = vec![
         &env,
@@ -162,11 +167,13 @@ fn test_update_members() {
             address: alice.clone(),
             name: String::from_str(&env, "Alice"),
             percentage: 6000, // 60%
+            joined_at,
         },
         GroupMember {
             address: bob.clone(),
             name: String::from_str(&env, "Bob"),
             percentage: 4000, // 40%
+            joined_at,
         },
     ];
 
@@ -183,12 +190,14 @@ fn test_update_members_invalid_percentage_too_low() {
     let id = BytesN::from_array(&env, &[3u8; 32]);
 
     client.create(&id, &String::from_str(&env, "Team C"), &creator, &1, &token);
+    let joined_at = env.ledger().timestamp();
     let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
             name: String::from_str(&env, "Alice"),
             percentage: 5000,
+            joined_at,
         },
     ];
 
@@ -206,12 +215,14 @@ fn test_update_members_unauthorized() {
     client.create(&id, &String::from_str(&env, "Team D"), &creator, &1, &token);
 
     let other_user = Address::generate(&env);
+    let joined_at = env.ledger().timestamp();
     let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
             name: String::from_str(&env, "Alice"),
             percentage: 10000,
+            joined_at,
         },
     ];
 
@@ -226,12 +237,14 @@ fn test_update_members_group_not_found() {
     let (env, client, _creator, _token) = setup_env();
     let id = BytesN::from_array(&env, &[99u8; 32]);
 
+    let joined_at = env.ledger().timestamp();
     let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
             name: String::from_str(&env, "Alice"),
             percentage: 10000,
+            joined_at,
         },
     ];
 
@@ -249,17 +262,20 @@ fn test_update_members_duplicate_member() {
     let alice = Address::generate(&env);
 
     // Same address appears twice — must be rejected as DuplicateMember
+    let joined_at = env.ledger().timestamp();
     let members = vec![
         &env,
         GroupMember {
             address: alice.clone(),
             name: String::from_str(&env, "Alice"),
             percentage: 5000,
+            joined_at,
         },
         GroupMember {
             address: alice.clone(),
             name: String::from_str(&env, "Alice Again"),
             percentage: 5000,
+            joined_at,
         },
     ];
 
@@ -274,12 +290,14 @@ fn test_update_members_non_creator_panics() {
     client.create(&id, &String::from_str(&env, "Team C"), &creator, &1, &token);
 
     let attacker = Address::generate(&env);
+    let joined_at = env.ledger().timestamp();
     let members = vec![
         &env,
         GroupMember {
             address: Address::generate(&env),
             name: String::from_str(&env, "Alice"),
             percentage: 10000,
+            joined_at,
         },
     ];
     // Non-creator must be rejected with Unauthorized
@@ -2314,4 +2332,253 @@ fn test_create_group_requires_authorized_creator() {
     // This call should panic because mock_all_auths was not called,
     // meaning the creator's authorization is missing/invalid.
     client.create(&id, &name, &creator, &0, &token);
+}
+
+// ── Type tests for Group, Member, and GroupMember ────────────────────────────
+
+#[test]
+fn test_group_struct_creation() {
+    let env = Env::default();
+    let id = BytesN::from_array(&env, &[1u8; 32]);
+    let creator = Address::generate(&env);
+    let token = Address::generate(&env);
+    let created_at = 1_000_000u64;
+    let member_count = 5u32;
+
+    let group = crate::base::types::Group {
+        id: id.clone(),
+        creator: creator.clone(),
+        token: token.clone(),
+        created_at,
+        member_count,
+    };
+
+    assert_eq!(group.id, id);
+    assert_eq!(group.creator, creator);
+    assert_eq!(group.token, token);
+    assert_eq!(group.created_at, created_at);
+    assert_eq!(group.member_count, member_count);
+}
+
+#[test]
+fn test_member_struct_creation() {
+    let env = Env::default();
+    let address = Address::generate(&env);
+    let percentage = 5000u32;
+    let joined_at = 1_000_000u64;
+
+    let member = crate::base::types::Member {
+        address: address.clone(),
+        percentage,
+        joined_at,
+    };
+
+    assert_eq!(member.address, address);
+    assert_eq!(member.percentage, percentage);
+    assert_eq!(member.joined_at, joined_at);
+}
+
+#[test]
+fn test_group_member_struct_with_joined_at() {
+    let env = Env::default();
+    let address = Address::generate(&env);
+    let name = String::from_str(&env, "Alice");
+    let percentage = 6000u32;
+    let joined_at = 1_500_000u64;
+
+    let group_member = crate::base::types::GroupMember {
+        address: address.clone(),
+        name: name.clone(),
+        percentage,
+        joined_at,
+    };
+
+    assert_eq!(group_member.address, address);
+    assert_eq!(group_member.name, name);
+    assert_eq!(group_member.percentage, percentage);
+    assert_eq!(group_member.joined_at, joined_at);
+}
+
+#[test]
+fn test_multiple_members_different_join_times() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[100u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "Staggered Group"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let charlie = Address::generate(&env);
+
+    let joined_at_1 = 1_000_000u64;
+    let joined_at_2 = 1_000_500u64;
+    let joined_at_3 = 1_001_000u64;
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: alice.clone(),
+            name: String::from_str(&env, "Alice"),
+            percentage: 5000,
+            joined_at: joined_at_1,
+        },
+        GroupMember {
+            address: bob.clone(),
+            name: String::from_str(&env, "Bob"),
+            percentage: 3000,
+            joined_at: joined_at_2,
+        },
+        GroupMember {
+            address: charlie.clone(),
+            name: String::from_str(&env, "Charlie"),
+            percentage: 2000,
+            joined_at: joined_at_3,
+        },
+    ];
+
+    client.update_members(&id, &creator, &members, &1);
+
+    let details = client.get(&id);
+    assert_eq!(details.members.len(), 3);
+
+    let alice_member = details.members.get(0).unwrap();
+    assert_eq!(alice_member.address, alice);
+    assert_eq!(alice_member.joined_at, joined_at_1);
+
+    let bob_member = details.members.get(1).unwrap();
+    assert_eq!(bob_member.address, bob);
+    assert_eq!(bob_member.joined_at, joined_at_2);
+
+    let charlie_member = details.members.get(2).unwrap();
+    assert_eq!(charlie_member.address, charlie);
+    assert_eq!(charlie_member.joined_at, joined_at_3);
+}
+
+#[test]
+fn test_member_joined_at_timestamp_persistence() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[101u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "Time Test Group"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    let current_timestamp = env.ledger().timestamp();
+    let member = Address::generate(&env);
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: member.clone(),
+            name: String::from_str(&env, "Timestamped Member"),
+            percentage: 10000,
+            joined_at: current_timestamp,
+        },
+    ];
+
+    client.update_members(&id, &creator, &members, &1);
+
+    // Retrieve the group and verify joined_at persists
+    let details = client.get(&id);
+    let retrieved_member = details.members.get(0).unwrap();
+    assert_eq!(retrieved_member.joined_at, current_timestamp);
+    assert_eq!(retrieved_member.address, member);
+}
+
+#[test]
+fn test_group_member_count_tracking() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[102u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "Count Test Group"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    // Start with no members
+    let initial = client.get(&id);
+    assert_eq!(initial.members.len(), 0);
+
+    // Add 3 members
+    let joined_at = env.ledger().timestamp();
+    let mut members = Vec::new(&env);
+    for i in 0..3 {
+        members.push_back(GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, &format!("Member {}", i)),
+            percentage: 3333 + if i == 2 { 1 } else { 0 },
+            joined_at,
+        });
+    }
+
+    client.update_members(&id, &creator, &members, &1);
+    let after_add = client.get(&id);
+    assert_eq!(after_add.members.len(), 3);
+
+    // Replace with 2 members
+    let mut new_members = Vec::new(&env);
+    for i in 0..2 {
+        new_members.push_back(GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, &format!("New Member {}", i)),
+            percentage: 5000,
+            joined_at,
+        });
+    }
+
+    client.update_members(&id, &creator, &new_members, &1);
+    let after_update = client.get(&id);
+    assert_eq!(after_update.members.len(), 2);
+}
+
+#[test]
+fn test_struct_serialization_via_get() {
+    // This test verifies that structs with joined_at properly serialize/deserialize
+    // through the contract's storage layer
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[103u8; 32]);
+    client.create(
+        &id,
+        &String::from_str(&env, "Serialization Test"),
+        &creator,
+        &42,
+        &token,
+    );
+
+    let joined_at = 2_000_000u64;
+    let member = Address::generate(&env);
+    let members = vec![
+        &env,
+        GroupMember {
+            address: member.clone(),
+            name: String::from_str(&env, "Test Member"),
+            percentage: 10000,
+            joined_at,
+        },
+    ];
+
+    client.update_members(&id, &creator, &members, &1);
+
+    // Retrieve and verify all fields round-trip correctly
+    let details = client.get(&id);
+    assert_eq!(details.id, id);
+    assert_eq!(details.creator, creator);
+    assert_eq!(details.payment_token, token);
+    assert_eq!(details.usage_count, 42);
+    assert_eq!(details.members.len(), 1);
+
+    let retrieved_member = details.members.get(0).unwrap();
+    assert_eq!(retrieved_member.address, member);
+    assert_eq!(retrieved_member.percentage, 10000);
+    assert_eq!(retrieved_member.joined_at, joined_at);
 }

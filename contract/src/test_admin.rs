@@ -125,6 +125,7 @@ fn test_distribute_paused() {
         &token_address,
     );
     let member = Address::generate(&env);
+    let joined_at = env.ledger().timestamp();
     client.update_members(
         &id,
         &creator,
@@ -134,6 +135,7 @@ fn test_distribute_paused() {
                 address: member.clone(),
                 name: String::from_str(&env, "M"),
                 percentage: 10000,
+                joined_at,
             },
         ],
     );
