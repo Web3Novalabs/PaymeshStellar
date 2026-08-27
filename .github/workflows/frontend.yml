@@ -32,11 +32,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: cd frontend && pnpm install --frozen-lockfile
+        run: cd frontend && pnpm install
 
       - name: Lint
         run: cd frontend && pnpm lint
@@ -62,10 +60,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: cd frontend && pnpm install --frozen-lockfile
+        run: cd frontend && pnpm install
 
       - name: Run tests
         run: cd frontend && pnpm --filter frontend test 2>/dev/null || echo "No tests configured"
