@@ -1,22 +1,73 @@
 //! Event publishers for contract state changes and token distributions.
 
-use soroban_sdk::{Address, BytesN, Env};
+use soroban_sdk::{contracttype, Address, BytesN, Env};
+
+/// Emitted when a new AutoShare group is created.
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+pub struct GroupCreated {
+    /// Identifier of the newly created group.
+    pub group_id: BytesN<32>,
+    /// Address that created the group.
+    pub creator: Address,
+    /// Token contract configured for the group's distributions.
+    pub token: Address,
+    /// Ledger timestamp at which the group was created.
+    pub timestamp: u64,
+}
+
+/// Emitted when a group's member list is replaced.
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+pub struct MembersUpdated {
+    /// Identifier of the updated group.
+    pub group_id: BytesN<32>,
+    /// Number of members in the group after the update.
+    pub member_count: u32,
+    /// Ledger timestamp at which the update occurred.
+    pub timestamp: u64,
+}
+
+/// Emitted when a distribution has been paid out to a group's members.
+#[contracttype]
+#[derive(Debug, PartialEq, Clone)]
+pub struct DistributionProcessed {
+    /// Identifier of the group the distribution was processed for.
+    pub group_id: BytesN<32>,
+    /// Total amount distributed across the group's members.
+    pub total_amount: i128,
+    /// Ledger timestamp at which the distribution was processed.
+    pub timestamp: u64,
+}
 
 /// Publishes an `("autoshare", "created")` event.
 ///
-/// Topics are `"autoshare"` and `"created"`. The payload is `(id, creator)`.
-pub fn group_created(env: &Env, id: &BytesN<32>, creator: &Address) {
-    env.events()
-        .publish(("autoshare", "created"), (id.clone(), creator.clone()));
+/// Topics are `"autoshare"` and `"created"`. The payload is a [`GroupCreated`].
+pub fn group_created(env: &Env, id: &BytesN<32>, creator: &Address, token: &Address) {
+    env.events().publish(
+        ("autoshare", "created"),
+        GroupCreated {
+            group_id: id.clone(),
+            creator: creator.clone(),
+            token: token.clone(),
+            timestamp: env.ledger().timestamp(),
+        },
+    );
 }
 
 /// Publishes an `("autoshare", "members_updated")` event.
 ///
-/// Topics are `"autoshare"` and `"members_updated"`. The payload is
-/// `(id, member_count)`.
+/// Topics are `"autoshare"` and `"members_updated"`. The payload is a
+/// [`MembersUpdated`].
 pub fn members_updated(env: &Env, id: &BytesN<32>, member_count: u32) {
-    env.events()
-        .publish(("autoshare", "members_updated"), (id.clone(), member_count));
+    env.events().publish(
+        ("autoshare", "members_updated"),
+        MembersUpdated {
+            group_id: id.clone(),
+            member_count,
+            timestamp: env.ledger().timestamp(),
+        },
+    );
 }
 
 /// Publishes an `("autoshare", "member_added")` event.
@@ -51,12 +102,16 @@ pub fn member_percentage_updated(
 
 /// Publishes an `("autoshare", "distributed")` event.
 ///
-/// Topics are `"autoshare"` and `"distributed"`. The payload is
-/// `(id, from, amount)`.
-pub fn distributed(env: &Env, id: &BytesN<32>, from: &Address, amount: i128) {
+/// Topics are `"autoshare"` and `"distributed"`. The payload is a
+/// [`DistributionProcessed`].
+pub fn distributed(env: &Env, id: &BytesN<32>, total_amount: i128) {
     env.events().publish(
         ("autoshare", "distributed"),
-        (id.clone(), from.clone(), amount),
+        DistributionProcessed {
+            group_id: id.clone(),
+            total_amount,
+            timestamp: env.ledger().timestamp(),
+        },
     );
 }
 

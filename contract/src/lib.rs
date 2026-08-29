@@ -274,7 +274,7 @@ mod contract_impl {
             all_ids.push_back(id.clone());
             env.storage().persistent().set(&all_groups_key, &all_ids);
 
-            events::group_created(&env, &id, &creator);
+            events::group_created(&env, &id, &creator, &details.payment_token);
             Ok(())
         }
 
@@ -594,7 +594,7 @@ mod contract_impl {
                 }
             }
 
-            events::distributed(&env, &id, &from, amount);
+            events::distributed(&env, &id, amount);
             Ok(())
         }
 

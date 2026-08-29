@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger as _},
-    vec, Address, BytesN, Env, String, Vec,
+    vec, Address, BytesN, Env, String, TryFromVal, Vec,
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1034,6 +1034,138 @@ fn test_distribute_emits_distributed_event() {
         has_distributed,
         "expected distributed event was not emitted"
     );
+}
+
+#[test]
+fn test_create_event_payload_has_expected_fields() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[82u8; 32]);
+
+    client.create(
+        &id,
+        &String::from_str(&env, "Payload Group"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    let events = env.events().all();
+    let payload = events
+        .iter()
+        .find_map(|(_contract, topics, data)| {
+            let is_created = topics
+                == soroban_sdk::vec![
+                    &env,
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "autoshare"),
+                        &env
+                    ),
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "created"),
+                        &env
+                    ),
+                ];
+            if is_created {
+                base::events::GroupCreated::try_from_val(&env, &data).ok()
+            } else {
+                None
+            }
+        })
+        .expect("expected GroupCreated event payload");
+
+    assert_eq!(payload.group_id, id);
+    assert_eq!(payload.creator, creator);
+    assert_eq!(payload.token, token);
+}
+
+#[test]
+fn test_update_members_event_payload_has_expected_fields() {
+    let (env, client, creator, token) = setup_env();
+    let id = BytesN::from_array(&env, &[83u8; 32]);
+
+    client.create(
+        &id,
+        &String::from_str(&env, "Payload Group 2"),
+        &creator,
+        &1,
+        &token,
+    );
+
+    let members = vec![
+        &env,
+        GroupMember {
+            address: Address::generate(&env),
+            name: String::from_str(&env, "Alice"),
+            percentage: 10000,
+        },
+    ];
+    client.update_members(&id, &creator, &members, &1);
+
+    let events = env.events().all();
+    let payload = events
+        .iter()
+        .find_map(|(_contract, topics, data)| {
+            let is_updated = topics
+                == soroban_sdk::vec![
+                    &env,
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "autoshare"),
+                        &env
+                    ),
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "members_updated"),
+                        &env
+                    ),
+                ];
+            if is_updated {
+                base::events::MembersUpdated::try_from_val(&env, &data).ok()
+            } else {
+                None
+            }
+        })
+        .expect("expected MembersUpdated event payload");
+
+    assert_eq!(payload.group_id, id);
+    assert_eq!(payload.member_count, 1);
+}
+
+#[test]
+fn test_distribute_event_payload_has_expected_fields() {
+    let (env, client, creator, token_address) = setup_token_env();
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&creator, &500);
+
+    let (id, _) =
+        setup_group_with_members(&env, &client, &creator, &token_address, 70, &[5000, 5000]);
+
+    client.distribute(&id, &creator, &500);
+
+    let events = env.events().all();
+    let payload = events
+        .iter()
+        .find_map(|(_contract, topics, data)| {
+            let is_distributed = topics
+                == soroban_sdk::vec![
+                    &env,
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "autoshare"),
+                        &env
+                    ),
+                    soroban_sdk::IntoVal::<Env, soroban_sdk::Val>::into_val(
+                        &String::from_str(&env, "distributed"),
+                        &env
+                    ),
+                ];
+            if is_distributed {
+                base::events::DistributionProcessed::try_from_val(&env, &data).ok()
+            } else {
+                None
+            }
+        })
+        .expect("expected DistributionProcessed event payload");
+
+    assert_eq!(payload.group_id, id);
+    assert_eq!(payload.total_amount, 500);
 }
 
 // ── upgrade & migration tests ────────────────────────────────────────────────
