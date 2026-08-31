@@ -24,11 +24,20 @@ export interface IndexerHealth {
 
 export class IndexerHealthService {
   private readonly contractId: string;
-  private readonly client: SorobanEventsClient;
+  private client: SorobanEventsClient | undefined;
+  private readonly rpcUrl: string;
 
   constructor(contractId: string, client?: SorobanEventsClient, rpcUrl?: string) {
     this.contractId = contractId;
-    this.client = client ?? new RpcSorobanEventsClient(rpcUrl ?? '');
+    this.client = client;
+    this.rpcUrl = rpcUrl ?? '';
+  }
+
+  private getClient(): SorobanEventsClient | null {
+    if (this.client) return this.client;
+    if (!this.rpcUrl) return null;
+    this.client = new RpcSorobanEventsClient(this.rpcUrl);
+    return this.client;
   }
 
   async getHealth(): Promise<IndexerHealth> {
@@ -46,7 +55,19 @@ export class IndexerHealthService {
     }
 
     try {
-      const latestLedger = await this.client.getLatestLedger();
+      const rpcClient = this.getClient();
+      if (!rpcClient) {
+        return {
+          started: true,
+          contractId: this.contractId,
+          lastLedger: cursor.lastLedger,
+          latestLedger: null,
+          lagLedgers: null,
+          lastCursorUpdateAt: cursor.updatedAt.toISOString(),
+          error: 'SOROBAN_RPC_URL not configured',
+        };
+      }
+      const latestLedger = await rpcClient.getLatestLedger();
       return {
         started: true,
         contractId: this.contractId,
