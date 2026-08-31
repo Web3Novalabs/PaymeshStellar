@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.{ts,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,json}\"",
     "type-check": "tsc --noEmit",
-    "test": "NODE_ENV=test node --test $(find dist -name '*.test.js' | tr '\n' ' ')",
+    "test": "NODE_ENV=test node --import ./dist/polyfills/webcrypto.js --test $(find dist -name '*.test.js' | tr '\n' ' ')",
     "db:migrate": "node dist/db/migrate.js",
     "db:migrate:down": "node dist/db/migrate.js down",
     "indexer": "node dist/workers/indexer.js",
