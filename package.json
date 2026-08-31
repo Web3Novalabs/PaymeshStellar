@@ -11,6 +11,8 @@
     "build:backend": "pnpm --filter backend build",
     "lint:backend": "pnpm --filter backend lint",
     "typecheck:backend": "pnpm --filter backend type-check",
+    "backend:indexer": "pnpm --filter backend indexer",
+    "backend:backfill": "pnpm --filter backend backfill",
     "build:contract": "cd contract && cargo build",
     "clippy:contract": "cd contract && cargo clippy --all --all-targets -- -D warnings",
     "test:contract": "cd contract && cargo test",

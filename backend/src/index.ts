@@ -18,6 +18,7 @@ import { idempotency } from './middleware/idempotency.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import adminRouter from './routes/admin.js';
 import { reconciliationService } from './services/reconcile.js';
+import { IndexerHealthService } from './services/indexerHealth.js';
 
 dotenv.config();
 validateAuthEnvironment();
@@ -30,6 +31,11 @@ if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
 const app: Express = express();
 const port = process.env.PORT || 3001;
 const startTime = Date.now();
+const indexerHealthService = new IndexerHealthService(
+  process.env.CONTRACT_ID || '',
+  undefined,
+  process.env.SOROBAN_RPC_URL || ''
+);
 
 app.use(helmet());
 app.use(
@@ -45,14 +51,19 @@ app.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Welcome to PaymeshStellar Backend API' });
 });
 
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    uptime: Math.floor((Date.now() - startTime) / 1000),
-    version: process.env.npm_package_version ?? '0.1.0',
-    reconciliation: reconciliationService.getHealth(),
-  });
-});
+app.get(
+  '/health',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const indexer = await indexerHealthService.getHealth();
+    res.json({
+      status: 'ok',
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      version: process.env.npm_package_version ?? '0.1.0',
+      reconciliation: reconciliationService.getHealth(),
+      indexer,
+    });
+  })
+);
 
 if (process.env.NODE_ENV === 'test') {
   app.get(

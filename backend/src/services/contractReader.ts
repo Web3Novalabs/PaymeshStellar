@@ -1,3 +1,6 @@
+import { SorobanEventsClient, RpcSorobanEventsClient } from './sorobanRpcClient.js';
+import { decodeGroupDetails, ScValDecodeError } from './scval.js';
+
 export interface ChainGroupMember {
   address: string;
   shareBps: number;
@@ -5,6 +8,7 @@ export interface ChainGroupMember {
 
 export interface ChainGroup {
   id: string;
+  name: string;
   creator: string;
   token: string;
   members: ChainGroupMember[];
@@ -18,22 +22,42 @@ export interface ChainReader {
   getGroup(groupId: string): Promise<ChainGroup | null>;
 }
 
+/**
+ * Reads a group's full state straight out of contract persistent storage
+ * (DataKey::Group(id)) via getLedgerEntries — no simulated invocation and no
+ * funded account required, since this is a plain storage read rather than a
+ * contract function call.
+ */
 export class SorobanChainReader implements ChainReader {
-  constructor(
-    private readonly rpcUrl: string,
-    private readonly contractId: string
-  ) {
-    // Suppress unused warnings since this is a stub
-    void this.rpcUrl;
-    void this.contractId;
+  private readonly contractId: string;
+  private readonly client: SorobanEventsClient;
+
+  constructor(rpcUrl: string, contractId: string, client?: SorobanEventsClient) {
+    this.contractId = contractId;
+    this.client = client ?? new RpcSorobanEventsClient(rpcUrl);
   }
 
   async getGroup(groupId: string): Promise<ChainGroup | null> {
-    void groupId;
-    // In a real implementation, this would use @stellar/stellar-sdk rpc.Server
-    // to query the Soroban contract storage or invoke a getter method.
-    // E.g., rpcServer.getContractData(...) and parse the XDR.
-    // For this issue scope, we define the interface.
-    throw new Error('SorobanChainReader.getGroup is not yet implemented.');
+    const idHex = groupId.startsWith('0x') ? groupId.slice(2) : groupId;
+    const raw = await this.client.getGroupLedgerEntry(this.contractId, idHex);
+    if (!raw) return null;
+
+    let details;
+    try {
+      details = decodeGroupDetails(raw);
+    } catch (err) {
+      if (err instanceof ScValDecodeError) {
+        throw new Error(`Failed to decode on-chain group ${idHex}: ${err.message}`, { cause: err });
+      }
+      throw err;
+    }
+
+    return {
+      id: details.idHex,
+      name: details.name,
+      creator: details.creator,
+      token: details.paymentToken,
+      members: details.members.map((m) => ({ address: m.address, shareBps: m.percentageBps })),
+    };
   }
 }
