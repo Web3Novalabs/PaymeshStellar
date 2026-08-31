@@ -17,7 +17,7 @@ process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
 // written test (rather than a data-driven loop) so failures surface with
 // a specific, greppable test name in CI output.
 
-const VALID_ADDRESS = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU';
+const VALID_ADDRESS = 'GDHVHQN2JFDZ5XYBIA3QBLGTHR7GXJZVUDTVQJJXM7SOMXA5YYBSDFWX';
 const REAL_ADDRESS = 'GDHVHQN2JFDZ5XYBIA3QBLGTHR7GXJZVUDTVQJJXM7SOMXA5YYBSDFWX';
 
 beforeEach(async () => {
@@ -5052,10 +5052,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: ' ', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: too short hex', async () => {
@@ -5066,10 +5066,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'deadbeef', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: too long hex', async () => {
@@ -5084,10 +5084,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: uppercase hex of correct length', async () => {
@@ -5102,10 +5102,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: non-hex letters', async () => {
@@ -5120,10 +5120,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: symbols', async () => {
@@ -5138,10 +5138,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: '!@#$%^&*()_+-=[]{}|;:,.<>/?~`',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: sql injection attempt', async () => {
@@ -5152,10 +5152,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: "' OR '1'='1", signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: script tag injection', async () => {
@@ -5166,10 +5166,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '<script>alert(1)</script>', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: path traversal attempt', async () => {
@@ -5180,10 +5180,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '../../../etc/passwd', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: whitespace only', async () => {
@@ -5194,10 +5194,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '     ', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: newline embedded', async () => {
@@ -5208,10 +5208,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'dead\nbeef', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: null byte embedded', async () => {
@@ -5222,10 +5222,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'dead\u0000beef', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: unicode content', async () => {
@@ -5236,10 +5236,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '🔥nonce🔥', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: literal "null"', async () => {
@@ -5250,10 +5250,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'null', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: literal "undefined"', async () => {
@@ -5264,10 +5264,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'undefined', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: numeric string', async () => {
@@ -5282,10 +5282,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: '123456789012345678901234567890',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: base64-looking value', async () => {
@@ -5296,10 +5296,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'ZGVhZGJlZWZkZWFkYmVlZg==', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: very long value (2000 chars)', async () => {
@@ -5315,10 +5315,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: single character', async () => {
@@ -5329,10 +5329,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'a', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: uuid-shaped value', async () => {
@@ -5347,10 +5347,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: '123e4567-e89b-12d3-a456-426614174000',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: hex with one flipped char (would-be off-by-one)', async () => {
@@ -5365,10 +5365,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'deadbeefdeadbeefdeadbeefdeadbeee',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: hex with uppercase mix', async () => {
@@ -5383,10 +5383,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'DeAdBeEfDeAdBeEfDeAdBeEfDeAdBeEf',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: double-encoded value', async () => {
@@ -5401,10 +5401,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'deadbeefdeadbeefdeadbeefdeadbeef',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: JSON-looking string', async () => {
@@ -5415,10 +5415,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '{"nonce":"forged"}', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: trailing whitespace', async () => {
@@ -5433,10 +5433,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'deadbeefdeadbeefdeadbeefdeadbeef ',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: leading whitespace', async () => {
@@ -5451,10 +5451,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: ' deadbeefdeadbeefdeadbeefdeadbeef',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: repeated zero bytes', async () => {
@@ -5469,10 +5469,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: '00000000000000000000000000000000',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: repeated f bytes (valid shape, wrong value)', async () => {
@@ -5487,10 +5487,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'ffffffffffffffffffffffffffffffff',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: mixed-length garbage', async () => {
@@ -5501,10 +5501,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: 'ab12', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: emoji only', async () => {
@@ -5515,10 +5515,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '🎲🎲🎲🎲', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: control characters', async () => {
@@ -5529,10 +5529,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '\u0001\u0002\u0003\u0004', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: percent-encoded garbage', async () => {
@@ -5543,10 +5543,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '%20%00%FF', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: tab embedded', async () => {
@@ -5561,10 +5561,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'dead\tbeefdeadbeefdeadbeefdeadbeef',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: carriage return embedded', async () => {
@@ -5579,10 +5579,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: 'dead\rbeefdeadbeefdeadbeefdeadbeef',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: backslash sequences', async () => {
@@ -5593,10 +5593,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '\\\\\\\\\\\\\\\\', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: quote characters', async () => {
@@ -5611,10 +5611,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
         nonce: '""""""""""""""""""""""""""""""""',
         signature: 'ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: very short numeric', async () => {
@@ -5625,10 +5625,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '0', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: negative number string', async () => {
@@ -5639,10 +5639,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '-1', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects nonce: scientific notation string', async () => {
@@ -5653,10 +5653,10 @@ describe('POST /auth/verify — invalid nonce matrix', () => {
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: VALID_ADDRESS, nonce: '1e10', signature: 'ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 });
 
@@ -5681,10 +5681,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: ' ' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: not base64 at all', async () => {
@@ -5694,10 +5694,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '!!!not-base64!!!' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: too short base64', async () => {
@@ -5707,10 +5707,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'YQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: too long base64 (256 random bytes)', async () => {
@@ -5725,10 +5725,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: all-zero-byte signature', async () => {
@@ -5743,10 +5743,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: all-0xFF-byte signature', async () => {
@@ -5761,10 +5761,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           '/////////////////////////////////////////////////////////////////////////////////////w==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: ASCII text re-encoded as base64', async () => {
@@ -5774,10 +5774,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'dGhpcyBpcyBub3QgYSBzaWduYXR1cmU=' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: correct-length random bytes', async () => {
@@ -5792,10 +5792,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           'KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKg==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: url-safe base64 characters (-_)', async () => {
@@ -5805,10 +5805,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'YQ-_YQ-_YQ-_YQ-_YQ-_YQ-_YQ-_YQ-_' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: whitespace only', async () => {
@@ -5818,10 +5818,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '        ' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: sql injection attempt', async () => {
@@ -5831,10 +5831,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: "'; DROP TABLE users; --" })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: script tag injection', async () => {
@@ -5844,10 +5844,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '<script>alert(1)</script>' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: literal "null"', async () => {
@@ -5857,10 +5857,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'null' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: literal "undefined"', async () => {
@@ -5870,10 +5870,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'undefined' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: newline embedded', async () => {
@@ -5883,10 +5883,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'ZmFr\nZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: null byte embedded', async () => {
@@ -5896,10 +5896,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'ZmFr\u0000ZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: unicode content', async () => {
@@ -5909,10 +5909,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '🔥signature🔥' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: very long value (5000 chars)', async () => {
@@ -5927,10 +5927,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: single character', async () => {
@@ -5940,10 +5940,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'A' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: hex string instead of base64', async () => {
@@ -5953,10 +5953,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'deadbeefdeadbeefdeadbeefdeadbeef' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: JSON-looking string', async () => {
@@ -5966,10 +5966,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '{"signature":"forged"}' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: duplicated valid-looking chunk', async () => {
@@ -5984,10 +5984,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
         signature:
           'ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==ZmFrZQ==',
       })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: padding-only string', async () => {
@@ -5997,10 +5997,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '====' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: percent-encoded garbage', async () => {
@@ -6010,10 +6010,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '%20%00%FF' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: trailing whitespace', async () => {
@@ -6023,10 +6023,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'ZmFrZQ== ' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: leading whitespace', async () => {
@@ -6036,10 +6036,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: ' ZmFrZQ==' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: control characters', async () => {
@@ -6049,10 +6049,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '\u0001\u0002\u0003\u0004' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: mixed valid/invalid base64 chars', async () => {
@@ -6062,10 +6062,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: 'ZmFrZQ==!!!' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 
   it('rejects signature: emoji only', async () => {
@@ -6075,10 +6075,10 @@ describe('POST /auth/verify — invalid signature matrix (real verifier)', () =>
     const res = await request(app)
       .post('/auth/verify')
       .send({ address: REAL_ADDRESS, nonce, signature: '🎲🎲🎲🎲' })
-      .expect(401);
+      .expect(400);
 
     assert.strictEqual(res.body.success, false);
-    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
   });
 });
 

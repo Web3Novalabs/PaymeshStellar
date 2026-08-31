@@ -41,7 +41,20 @@ export class IndexerHealthService {
   }
 
   async getHealth(): Promise<IndexerHealth> {
-    const cursor = await loadCursor(this.contractId);
+    let cursor;
+    try {
+      cursor = await loadCursor(this.contractId);
+    } catch (err) {
+      return {
+        started: false,
+        contractId: this.contractId,
+        lastLedger: null,
+        latestLedger: null,
+        lagLedgers: null,
+        lastCursorUpdateAt: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
 
     if (!cursor) {
       return {

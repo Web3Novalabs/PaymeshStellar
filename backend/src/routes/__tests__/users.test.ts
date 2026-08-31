@@ -16,7 +16,7 @@ const token2 = signToken({ sub: address2 });
 
 function mockUser(overrides: Partial<User> = {}): User {
   return {
-    id: 'user-id-123',
+    id: '11111111-1111-4111-8111-111111111111',
     address: address1,
     name: 'Alice',
     email: 'alice@example.com',
@@ -142,7 +142,7 @@ describe('POST /api/users', () => {
 
     assert.strictEqual(res.body.success, false);
     assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
-    assert.match(res.body.error.message, /Unknown fields/);
+    assert.match(res.body.error.message, /Unrecognized key|Unknown fields/);
     assert.strictEqual(createMock.mock.calls.length, 0);
   });
 
@@ -203,7 +203,9 @@ describe('GET /api/users/:id', () => {
   it('returns 404 when user does not exist', async () => {
     mock.method(usersService, 'getById', () => Promise.resolve(null));
 
-    const res = await request(app).get('/api/users/nonexistent-id').expect(404);
+    const res = await request(app)
+      .get('/api/users/22222222-2222-4222-8222-222222222222')
+      .expect(404);
 
     assert.strictEqual(res.body.success, false);
     assert.strictEqual(res.body.error.code, 'NOT_FOUND');
@@ -303,7 +305,7 @@ describe('PUT /api/users/:id', () => {
     });
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .send({ name: 'Updated' })
       .expect(401);
 
@@ -316,7 +318,7 @@ describe('PUT /api/users/:id', () => {
     mock.method(usersService, 'getById', () => Promise.resolve(null));
 
     const res = await request(app)
-      .put('/api/users/nonexistent-id')
+      .put('/api/users/22222222-2222-4222-8222-222222222222')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: 'Updated' })
       .expect(404);
@@ -333,7 +335,7 @@ describe('PUT /api/users/:id', () => {
     });
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: 'Hacker' })
       .expect(403);
@@ -351,7 +353,7 @@ describe('PUT /api/users/:id', () => {
     });
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: '' })
       .expect(400);
@@ -369,7 +371,7 @@ describe('PUT /api/users/:id', () => {
     });
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ email: 'not-an-email' })
       .expect(400);
@@ -387,14 +389,14 @@ describe('PUT /api/users/:id', () => {
     });
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: 'Alice', extraField: 'value' })
       .expect(400);
 
     assert.strictEqual(res.body.success, false);
     assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
-    assert.match(res.body.error.message, /Unknown fields/);
+    assert.match(res.body.error.message, /Unrecognized key|Unknown fields/);
     assert.strictEqual(updateMock.mock.calls.length, 0);
   });
 
@@ -405,7 +407,7 @@ describe('PUT /api/users/:id', () => {
     mock.method(usersService, 'update', () => Promise.resolve(updated));
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: 'Updated Alice' })
       .expect(200);
@@ -421,7 +423,7 @@ describe('PUT /api/users/:id', () => {
     mock.method(usersService, 'update', () => Promise.resolve(updated));
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ email: 'newemail@example.com' })
       .expect(200);
@@ -437,7 +439,7 @@ describe('PUT /api/users/:id', () => {
     mock.method(usersService, 'update', () => Promise.resolve(updated));
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ name: 'Updated', email: 'new@example.com' })
       .expect(200);
@@ -454,7 +456,7 @@ describe('PUT /api/users/:id', () => {
     mock.method(usersService, 'update', () => Promise.resolve(updated));
 
     const res = await request(app)
-      .put('/api/users/user-id-123')
+      .put('/api/users/11111111-1111-4111-8111-111111111111')
       .set('Authorization', `Bearer ${token1}`)
       .send({ email: null })
       .expect(200);

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const CreateUserSchema = z.object({
   body: z
     .object({
-      name: z.string().min(1, 'Field "name" is required and must be a non-empty string.'),
+      name: z.string().trim().min(1, 'Field "name" is required and must be a non-empty string.'),
       email: z.string().email('Field "email" must be a valid RFC email address.').optional(),
     })
     .strict(),
@@ -15,7 +15,7 @@ export const UpdateUserSchema = z.object({
   }),
   body: z
     .object({
-      name: z.string().min(1, 'Field "name" must be a non-empty string.').optional(),
+      name: z.string().trim().min(1, 'Field "name" must be a non-empty string.').optional(),
       email: z
         .string()
         .email('Field "email" must be a valid RFC email address.')

@@ -4,6 +4,66 @@ import { query } from '../db/index.js';
 
 export type { Group, GroupMember, GroupsService };
 
+export class InMemoryGroupsService implements GroupsService {
+  private groups: Group[] = [];
+
+  async create(groupData: Omit<Group, 'id' | 'createdAt' | 'membersCount'>): Promise<Group> {
+    const group: Group = {
+      id: crypto.randomUUID(),
+      ...groupData,
+      membersCount: groupData.members.length,
+      createdAt: new Date(),
+    };
+    this.groups.push(group);
+    return group;
+  }
+
+  async getById(id: string): Promise<Group | null> {
+    return this.groups.find((g) => g.id === id) ?? null;
+  }
+
+  async getByGroupId(groupId: string): Promise<Group | null> {
+    return this.groups.find((g) => g.groupId === groupId) ?? null;
+  }
+
+  async list(options: {
+    limit?: number;
+    offset?: number;
+    creator?: string;
+  }): Promise<{ groups: Group[]; totalCount: number }> {
+    let filtered = this.groups;
+    if (options.creator) {
+      filtered = filtered.filter((g) => g.creator === options.creator);
+    }
+    const totalCount = filtered.length;
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 10;
+    return { groups: filtered.slice(offset, offset + limit), totalCount };
+  }
+
+  async update(
+    id: string,
+    groupData: Partial<Omit<Group, 'id' | 'createdAt'>>
+  ): Promise<Group | null> {
+    const index = this.groups.findIndex((g) => g.id === id);
+    if (index === -1) return null;
+    const existing = this.groups[index];
+    const members = groupData.members ?? existing.members;
+    const updated: Group = {
+      ...existing,
+      ...groupData,
+      members,
+      membersCount: members.length,
+    };
+    this.groups[index] = updated;
+    return updated;
+  }
+
+  async clear(): Promise<void> {
+    this.groups = [];
+  }
+}
+
 export class PgGroupsService implements GroupsService {
   async create(groupData: Omit<Group, 'id' | 'createdAt' | 'membersCount'>): Promise<Group> {
     const groupId = crypto.randomUUID();
@@ -226,4 +286,5 @@ export class PgGroupsService implements GroupsService {
   }
 }
 
-export const groupsService: GroupsService = new PgGroupsService();
+export const groupsService: GroupsService =
+  process.env.NODE_ENV === 'test' ? new InMemoryGroupsService() : new PgGroupsService();
