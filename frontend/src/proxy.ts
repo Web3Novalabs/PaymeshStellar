@@ -4,9 +4,7 @@ import type { NextRequest } from 'next/server';
 const PROTECTED_PATHS = ['/dashboard', '/groups', '/settings'];
 
 function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(p + '/')
-  );
+  return PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
 export function proxy(request: NextRequest) {

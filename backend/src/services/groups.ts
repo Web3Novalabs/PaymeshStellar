@@ -4,10 +4,70 @@ import { query } from '../db/index.js';
 
 export type { Group, GroupMember, GroupsService };
 
+export class InMemoryGroupsService implements GroupsService {
+  private groups: Group[] = [];
+
+  async create(groupData: Omit<Group, 'id' | 'createdAt' | 'membersCount'>): Promise<Group> {
+    const group: Group = {
+      id: crypto.randomUUID(),
+      ...groupData,
+      membersCount: groupData.members.length,
+      createdAt: new Date(),
+    };
+    this.groups.push(group);
+    return group;
+  }
+
+  async getById(id: string): Promise<Group | null> {
+    return this.groups.find((g) => g.id === id) ?? null;
+  }
+
+  async getByGroupId(groupId: string): Promise<Group | null> {
+    return this.groups.find((g) => g.groupId === groupId) ?? null;
+  }
+
+  async list(options: {
+    limit?: number;
+    offset?: number;
+    creator?: string;
+  }): Promise<{ groups: Group[]; totalCount: number }> {
+    let filtered = this.groups;
+    if (options.creator) {
+      filtered = filtered.filter((g) => g.creator === options.creator);
+    }
+    const totalCount = filtered.length;
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 10;
+    return { groups: filtered.slice(offset, offset + limit), totalCount };
+  }
+
+  async update(
+    id: string,
+    groupData: Partial<Omit<Group, 'id' | 'createdAt'>>
+  ): Promise<Group | null> {
+    const index = this.groups.findIndex((g) => g.id === id);
+    if (index === -1) return null;
+    const existing = this.groups[index];
+    const members = groupData.members ?? existing.members;
+    const updated: Group = {
+      ...existing,
+      ...groupData,
+      members,
+      membersCount: members.length,
+    };
+    this.groups[index] = updated;
+    return updated;
+  }
+
+  async clear(): Promise<void> {
+    this.groups = [];
+  }
+}
+
 export class PgGroupsService implements GroupsService {
   async create(groupData: Omit<Group, 'id' | 'createdAt' | 'membersCount'>): Promise<Group> {
     const groupId = crypto.randomUUID();
-    
+
     // First ensure the creator exists in the users table to satisfy foreign key
     const userRes = await query(
       `INSERT INTO users (wallet_address, name) 
@@ -63,7 +123,9 @@ export class PgGroupsService implements GroupsService {
       [id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
+    const members: GroupMember[] = (
+      membersRes.rows as { address: string; percentage: string }[]
+    ).map((m) => ({
       address: m.address,
       name: m.address, // name not stored in members table currently
       percentage: parseFloat(m.percentage),
@@ -99,7 +161,9 @@ export class PgGroupsService implements GroupsService {
       [g.id]
     );
 
-    const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
+    const members: GroupMember[] = (
+      membersRes.rows as { address: string; percentage: string }[]
+    ).map((m) => ({
       address: m.address,
       name: m.address,
       percentage: parseFloat(m.percentage),
@@ -124,7 +188,7 @@ export class PgGroupsService implements GroupsService {
   }): Promise<{ groups: Group[]; totalCount: number }> {
     let whereClause = '';
     const params: (string | number)[] = [];
-    
+
     if (options.creator) {
       whereClause = 'WHERE u.wallet_address = $1';
       params.push(options.creator);
@@ -141,9 +205,9 @@ export class PgGroupsService implements GroupsService {
 
     const limit = options.limit ?? 10;
     const offset = options.offset ?? 0;
-    
+
     const limitOffsetParams = [...params, limit, offset];
-    
+
     const groupsRes = await query(
       `SELECT g.id, g.name, g.token, g.onchain_group_id, g.created_at, u.wallet_address as creator
        FROM groups g
@@ -161,8 +225,10 @@ export class PgGroupsService implements GroupsService {
          FROM members WHERE group_id = $1`,
         [g.id]
       );
-      
-      const members: GroupMember[] = membersRes.rows.map((m: { address: string; percentage: string }) => ({
+
+      const members: GroupMember[] = (
+        membersRes.rows as { address: string; percentage: string }[]
+      ).map((m) => ({
         address: m.address,
         name: m.address,
         percentage: parseFloat(m.percentage),
@@ -220,4 +286,5 @@ export class PgGroupsService implements GroupsService {
   }
 }
 
-export const groupsService: GroupsService = new PgGroupsService();
+export const groupsService: GroupsService =
+  process.env.NODE_ENV === 'test' ? new InMemoryGroupsService() : new PgGroupsService();

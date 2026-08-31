@@ -16,15 +16,11 @@ describe('middleware route protection', () => {
     const protectedPaths = ['/dashboard', '/groups', '/settings'];
 
     it.each(protectedPaths)('protects %s', (path) => {
-      expect(
-        protectedPaths.some((p) => path === p || path.startsWith(p + '/'))
-      ).toBe(true);
+      expect(protectedPaths.some((p) => path === p || path.startsWith(p + '/'))).toBe(true);
     });
 
     it('does not protect root', () => {
-      expect(
-        protectedPaths.some((p) => '/' === p || '/'.startsWith(p + '/'))
-      ).toBe(false);
+      expect(protectedPaths.some((p) => '/' === p || '/'.startsWith(p + '/'))).toBe(false);
     });
 
     it('protects nested paths', () => {
@@ -36,11 +32,9 @@ describe('middleware route protection', () => {
     });
 
     it('does not protect unrelated paths', () => {
-      expect(
-        protectedPaths.some(
-          (p) => '/api/auth' === p || '/api/auth'.startsWith(p + '/')
-        )
-      ).toBe(false);
+      expect(protectedPaths.some((p) => '/api/auth' === p || '/api/auth'.startsWith(p + '/'))).toBe(
+        false
+      );
     });
   });
 

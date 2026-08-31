@@ -57,7 +57,8 @@ function describeError(err: unknown): { message: string; stack?: string } {
 export async function runIndexerLoop(options: RunIndexerOptions = {}): Promise<void> {
   const config = indexerConfig();
   const client = options.client ?? new RpcSorobanEventsClient(config.rpcUrl);
-  const chainReader = options.chainReader ?? new SorobanChainReader(config.rpcUrl, config.contractId, client);
+  const chainReader =
+    options.chainReader ?? new SorobanChainReader(config.rpcUrl, config.contractId, client);
   const sleep = options.sleep ?? defaultSleep;
   const shouldStop = options.shouldStop ?? (() => false);
 
@@ -73,7 +74,14 @@ export async function runIndexerLoop(options: RunIndexerOptions = {}): Promise<v
       ? { type: 'cursor', pagingToken: cursor.pagingToken }
       : { type: 'ledger', ledger: cursor ? cursor.lastLedger + 1 : config.startLedger };
 
-    const page = await fetchPage(client, config.contractId, from, config.pageLimit, config.startLedger, logger);
+    const page = await fetchPage(
+      client,
+      config.contractId,
+      from,
+      config.pageLimit,
+      config.startLedger,
+      logger
+    );
     if (!page) {
       await sleep(Math.min(retryDelayMs, config.maxRetryDelayMs));
       retryDelayMs = Math.min(retryDelayMs * 2, config.maxRetryDelayMs);
@@ -81,7 +89,8 @@ export async function runIndexerLoop(options: RunIndexerOptions = {}): Promise<v
     }
     retryDelayMs = 1000;
 
-    const nextLastLedger = page.events.length > 0 ? page.events[page.events.length - 1].ledger : page.latestLedger;
+    const nextLastLedger =
+      page.events.length > 0 ? page.events[page.events.length - 1].ledger : page.latestLedger;
 
     try {
       await processEventBatch({
@@ -99,7 +108,11 @@ export async function runIndexerLoop(options: RunIndexerOptions = {}): Promise<v
     }
 
     logger.info(
-      { contractId: config.contractId, lastLedger: nextLastLedger, latestLedger: page.latestLedger },
+      {
+        contractId: config.contractId,
+        lastLedger: nextLastLedger,
+        latestLedger: page.latestLedger,
+      },
       'indexer: lag'
     );
 
@@ -144,7 +157,10 @@ async function fetchPage(
           limit,
         });
       } catch (fallbackErr) {
-        log.error({ err: describeError(fallbackErr) }, 'indexer: retry after retention fallback failed');
+        log.error(
+          { err: describeError(fallbackErr) },
+          'indexer: retry after retention fallback failed'
+        );
         return null;
       }
     }
@@ -162,9 +178,15 @@ async function main(): Promise<void> {
   const onSignal = (signal: string) => {
     if (stopping) return;
     stopping = true;
-    logger.info({ signal }, 'indexer: shutdown requested, finishing in-flight batch before exiting');
+    logger.info(
+      { signal },
+      'indexer: shutdown requested, finishing in-flight batch before exiting'
+    );
     forceExitTimer = setTimeout(() => {
-      logger.error({ shutdownGraceMs: config.shutdownGraceMs }, 'indexer: graceful shutdown timed out, forcing exit');
+      logger.error(
+        { shutdownGraceMs: config.shutdownGraceMs },
+        'indexer: graceful shutdown timed out, forcing exit'
+      );
       process.exit(1);
     }, config.shutdownGraceMs);
     forceExitTimer.unref();
@@ -173,7 +195,10 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => onSignal('SIGTERM'));
   process.on('SIGINT', () => onSignal('SIGINT'));
 
-  logger.info({ contractId: config.contractId, startLedger: config.startLedger }, 'indexer: starting');
+  logger.info(
+    { contractId: config.contractId, startLedger: config.startLedger },
+    'indexer: starting'
+  );
 
   try {
     await runIndexerLoop({ shouldStop: () => stopping });

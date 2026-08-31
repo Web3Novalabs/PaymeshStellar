@@ -10,7 +10,10 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <nav className="mb-6 flex flex-wrap gap-4 text-sm font-medium text-gray-600 dark:text-gray-400">
-          <Link href="/dashboard" className="transition hover:text-gray-900 dark:hover:text-gray-50">
+          <Link
+            href="/dashboard"
+            className="transition hover:text-gray-900 dark:hover:text-gray-50"
+          >
             Dashboard
           </Link>
           <Link href="/groups" className="transition hover:text-gray-900 dark:hover:text-gray-50">
@@ -45,7 +48,9 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Auth Method</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">SEP-10 / Stellar Wallet</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  SEP-10 / Stellar Wallet
+                </span>
               </div>
             </>
           )}

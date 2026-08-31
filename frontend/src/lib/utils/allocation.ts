@@ -59,10 +59,7 @@ export function validateAllocation(members: MemberAllocation[]): boolean {
  * @param members - Array of member allocations
  * @returns Array of share results
  */
-export function calculateShares(
-  totalAmount: number,
-  members: MemberAllocation[]
-): ShareResult[] {
+export function calculateShares(totalAmount: number, members: MemberAllocation[]): ShareResult[] {
   if (members.length === 0 || totalAmount <= 0) {
     return [];
   }
@@ -130,9 +127,7 @@ export function splitEvenly(memberCount: number): number[] {
  * @returns New array with rebalanced basis points
  */
 export function rebalanceAllocation(members: MemberAllocation[]): MemberAllocation[] {
-  const lockedTotal = members
-    .filter((m) => m.locked)
-    .reduce((sum, m) => sum + m.basisPoints, 0);
+  const lockedTotal = members.filter((m) => m.locked).reduce((sum, m) => sum + m.basisPoints, 0);
 
   const unlockedMembers = members.filter((m) => !m.locked);
   const unlockedCount = unlockedMembers.length;

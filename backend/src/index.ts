@@ -1,9 +1,11 @@
+import './polyfills/webcrypto.js';
 import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import cors from 'cors';
 import groupsRouter from './routes/groups.js';
 import transactionsRouter from './routes/transactions.js';
+import contractRouter from './routes/contract.js';
 import { asyncHandler } from './middleware/asyncHandler.js';
 import { requestLogger } from './middleware/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -12,6 +14,7 @@ import authRouter from './routes/auth.js';
 import { authConfig, validateAuthEnvironment } from './config/auth.js';
 import { challengesService } from './services/challenges.js';
 import { sessionsService } from './services/sessions.js';
+import { validateSorobanEnvironment } from './config/soroban.js';
 import { idempotency } from './middleware/idempotency.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import adminRouter from './routes/admin.js';
@@ -20,6 +23,7 @@ import { IndexerHealthService } from './services/indexerHealth.js';
 
 dotenv.config();
 validateAuthEnvironment();
+validateSorobanEnvironment();
 
 if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
   throw new Error('CORS_ORIGIN must be set in production');
@@ -48,16 +52,19 @@ app.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Welcome to PaymeshStellar Backend API' });
 });
 
-app.get('/health', asyncHandler(async (_req: Request, res: Response) => {
-  const indexer = await indexerHealthService.getHealth();
-  res.json({
-    status: 'ok',
-    uptime: Math.floor((Date.now() - startTime) / 1000),
-    version: process.env.npm_package_version ?? '0.1.0',
-    reconciliation: reconciliationService.getHealth(),
-    indexer,
-  });
-}));
+app.get(
+  '/health',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const indexer = await indexerHealthService.getHealth();
+    res.json({
+      status: 'ok',
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      version: process.env.npm_package_version ?? '0.1.0',
+      reconciliation: reconciliationService.getHealth(),
+      indexer,
+    });
+  })
+);
 
 if (process.env.NODE_ENV === 'test') {
   app.get(
@@ -78,6 +85,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/contract', contractRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

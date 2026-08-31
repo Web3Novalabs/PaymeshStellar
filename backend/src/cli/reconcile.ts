@@ -15,18 +15,21 @@ async function main() {
 
   try {
     const report = await reconciliationService.reconcileAll(repair);
-    
-    logger.info({
-      startTime: report.startTime,
-      endTime: report.endTime,
-      groupsScanned: report.groupsScanned,
-      driftCounts: report.driftCounts
-    }, 'Reconciliation complete');
+
+    logger.info(
+      {
+        startTime: report.startTime,
+        endTime: report.endTime,
+        groupsScanned: report.groupsScanned,
+        driftCounts: report.driftCounts,
+      },
+      'Reconciliation complete'
+    );
 
     // If there were drifts, and we didn't repair, maybe exit with 1?
     // The issue says "dry-run repair CLI". Doesn't specify exit code for drifts found.
     const hasDrifts = Object.values(report.driftCounts).reduce((a, b) => a + b, 0) > 0;
-    
+
     if (hasDrifts && !repair) {
       logger.warn('Drifts found. Run with --repair to fix them.');
     } else if (hasDrifts && repair) {

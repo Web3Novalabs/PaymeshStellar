@@ -25,8 +25,14 @@ export interface WalletAdapter {
   isAvailable(): Promise<boolean>;
   getAddress(): Promise<string>;
   getNetwork(): Promise<StellarNetwork>;
-  signTransaction(xdr: string, opts?: { network?: string; accountToSign?: string }): Promise<string>;
-  addEventListener?: (event: 'accountChanged' | 'networkChanged', handler: () => void) => () => void;
+  signTransaction(
+    xdr: string,
+    opts?: { network?: string; accountToSign?: string }
+  ): Promise<string>;
+  addEventListener?: (
+    event: 'accountChanged' | 'networkChanged',
+    handler: () => void
+  ) => () => void;
 }
 
 export interface AuthChallenge {

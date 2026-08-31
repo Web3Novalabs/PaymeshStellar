@@ -11,11 +11,17 @@ export const CreateGroupSchema = z.object({
       .array(
         z.object({
           address: z.string().refine(isValidStellarAddress, 'Invalid Stellar address'),
+          name: z.string().min(1, 'Member name is required'),
           percentage: z.number().positive().max(100),
         })
       )
-      .refine((members) => validateMembers(members) === null, 'Invalid members')
-  })
+      .superRefine((members, ctx) => {
+        const err = validateMembers(members);
+        if (err) {
+          ctx.addIssue({ code: 'custom', message: err.message });
+        }
+      }),
+  }),
 });
 
 export const ListGroupsSchema = z.object({
@@ -23,13 +29,13 @@ export const ListGroupsSchema = z.object({
     limit: z.coerce.number().min(0).max(100).default(10),
     offset: z.coerce.number().min(0).default(0),
     creator: z.string().refine(isValidStellarAddress, 'Invalid creator address').optional(),
-  })
+  }),
 });
 
 export const GetGroupSchema = z.object({
   params: z.object({
     id: z.string().uuid('Invalid group ID format'),
-  })
+  }),
 });
 
 export const UpdateGroupSchema = z.object({
@@ -43,13 +49,17 @@ export const UpdateGroupSchema = z.object({
       .array(
         z.object({
           address: z.string().refine(isValidStellarAddress, 'Invalid Stellar address'),
+          name: z.string().min(1, 'Member name is required'),
           percentage: z.number().positive().max(100),
         })
       )
       .optional()
-      .refine((members) => {
-        if (!members) return true;
-        return validateMembers(members) === null;
-      }, 'Invalid members')
-  })
+      .superRefine((members, ctx) => {
+        if (!members) return;
+        const err = validateMembers(members);
+        if (err) {
+          ctx.addIssue({ code: 'custom', message: err.message });
+        }
+      }),
+  }),
 });

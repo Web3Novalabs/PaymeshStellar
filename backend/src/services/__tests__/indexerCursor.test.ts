@@ -80,10 +80,15 @@ describe('indexerCursor', { skip: skipReason }, () => {
     assert.strictEqual(cursor?.lastLedger, 250);
     assert.strictEqual(cursor?.pagingToken, 'token-b');
 
-    const res = await pool.query('SELECT COUNT(*)::int AS count FROM indexer_cursor WHERE contract_id = $1', [
-      'CONTRACT_Y',
-    ]);
-    assert.strictEqual(res.rows[0].count, 1, 'expected exactly one row per contract id, not a new one per save');
+    const res = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM indexer_cursor WHERE contract_id = $1',
+      ['CONTRACT_Y']
+    );
+    assert.strictEqual(
+      res.rows[0].count,
+      1,
+      'expected exactly one row per contract id, not a new one per save'
+    );
   });
 
   it('saveCursor bumps updated_at on every write', async () => {

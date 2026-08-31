@@ -21,13 +21,14 @@ export const queryKeys = {
 export function useGroups() {
   return useQuery({
     queryKey: queryKeys.groups,
-    queryFn: ({ signal }) => apiClient.get<GroupListResponse>('/api/groups', { signal }),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      apiClient.get<GroupListResponse>('/api/groups', { signal }),
   });
 }
 export function useGroup(id: string) {
   return useQuery({
     queryKey: queryKeys.group(id),
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       apiClient.get<GroupSummary>(`/api/groups/${encodeURIComponent(id)}`, { signal }),
     enabled: Boolean(id),
   });

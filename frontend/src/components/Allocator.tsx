@@ -1,7 +1,13 @@
 'use client';
 
 import { useId } from 'react';
-import { MemberAllocation, getRemainingBasisPoints, basisPointsToPercentage, splitEvenly, rebalanceAllocation } from '@/lib/utils/allocation';
+import {
+  MemberAllocation,
+  getRemainingBasisPoints,
+  basisPointsToPercentage,
+  splitEvenly,
+  rebalanceAllocation,
+} from '@/lib/utils/allocation';
 import Button from './Button';
 
 interface AllocatorProps {
@@ -111,14 +117,17 @@ export default function Allocator({ members, onChange, disabled = false }: Alloc
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">
             {isValid ? (
-              <span className="text-green-800">Allocation complete: 10,000 / 10,000 basis points</span>
+              <span className="text-green-800">
+                Allocation complete: 10,000 / 10,000 basis points
+              </span>
             ) : remaining > 0 ? (
               <span className="text-yellow-800">
                 Remaining: {remaining} basis points ({basisPointsToPercentage(remaining)}%)
               </span>
             ) : (
               <span className="text-red-800">
-                Over-allocated by {Math.abs(remaining)} basis points ({basisPointsToPercentage(Math.abs(remaining))}%)
+                Over-allocated by {Math.abs(remaining)} basis points (
+                {basisPointsToPercentage(Math.abs(remaining))}%)
               </span>
             )}
           </p>
@@ -131,7 +140,9 @@ export default function Allocator({ members, onChange, disabled = false }: Alloc
       </div>
 
       {members.length === 0 ? (
-        <p className="text-sm text-gray-500 italic">Add members in the Members section to allocate shares.</p>
+        <p className="text-sm text-gray-500 italic">
+          Add members in the Members section to allocate shares.
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -205,7 +216,12 @@ export default function Allocator({ members, onChange, disabled = false }: Alloc
                         aria-pressed={member.locked}
                       >
                         {member.locked ? (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -214,7 +230,12 @@ export default function Allocator({ members, onChange, disabled = false }: Alloc
                             />
                           </svg>
                         ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -236,8 +257,9 @@ export default function Allocator({ members, onChange, disabled = false }: Alloc
       {/* Helper text */}
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
         <p className="text-xs text-gray-600">
-          <strong>Tip:</strong> Use "Split Evenly" to distribute 10,000 basis points equally among all members.
-          Lock specific members to preserve their allocation when using "Rebalance Unlocked".
+          <strong>Tip:</strong> Use &quot;Split Evenly&quot; to distribute 10,000 basis points
+          equally among all members. Lock specific members to preserve their allocation when using
+          &quot;Rebalance Unlocked&quot;.
         </p>
       </div>
     </div>

@@ -18,9 +18,7 @@ export async function authenticateWithWallet(
   const challenge = await requestChallenge(address);
 
   const server = new StellarSdk.Horizon.Server(
-    network === 'PUBLIC'
-      ? 'https://horizon.stellar.org'
-      : 'https://horizon-testnet.stellar.org'
+    network === 'PUBLIC' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org'
   );
 
   const account = await server.loadAccount(address);
@@ -28,9 +26,7 @@ export async function authenticateWithWallet(
   const txBuilder = new StellarSdk.TransactionBuilder(account, {
     fee: StellarSdk.BASE_FEE,
     networkPassphrase:
-      network === 'PUBLIC'
-        ? StellarSdk.Networks.PUBLIC
-        : StellarSdk.Networks.TESTNET,
+      network === 'PUBLIC' ? StellarSdk.Networks.PUBLIC : StellarSdk.Networks.TESTNET,
   });
 
   const tx = txBuilder
@@ -45,10 +41,7 @@ export async function authenticateWithWallet(
     .build();
 
   const signedXdr = await wallet.signTransaction(tx.toXDR(), {
-    network:
-      network === 'PUBLIC'
-        ? StellarSdk.Networks.PUBLIC
-        : StellarSdk.Networks.TESTNET,
+    network: network === 'PUBLIC' ? StellarSdk.Networks.PUBLIC : StellarSdk.Networks.TESTNET,
     accountToSign: address,
   });
 

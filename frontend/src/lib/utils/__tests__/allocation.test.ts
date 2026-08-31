@@ -89,7 +89,7 @@ describe('allocation utilities', () => {
       // Dust (remainder) should go to the last member(s)
       const baseShare = Math.floor(TOTAL_BASIS_POINTS / 3);
       const remainder = TOTAL_BASIS_POINTS - baseShare * 3;
-      
+
       // The last 'remainder' members should have +1
       let dustCount = 0;
       for (let i = result.length - 1; i >= result.length - remainder; i--) {

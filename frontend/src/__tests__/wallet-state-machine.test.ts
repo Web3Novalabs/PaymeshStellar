@@ -79,7 +79,9 @@ describe('Wallet state machine transitions', () => {
     },
   ];
 
-  const nonIdempotentTransitions = transitions.filter((t) => t.name !== 'disconnected -> disconnected (double disconnect is idempotent)');
+  const nonIdempotentTransitions = transitions.filter(
+    (t) => t.name !== 'disconnected -> disconnected (double disconnect is idempotent)'
+  );
 
   nonIdempotentTransitions.forEach(({ name, from, to }) => {
     it(name, () => {

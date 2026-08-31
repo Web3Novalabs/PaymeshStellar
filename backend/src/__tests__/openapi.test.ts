@@ -1,26 +1,28 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import request from 'supertest';
 import { app } from '../index.js';
 import fs from 'fs';
-import path from 'path';
 import yaml from 'yaml';
 import OpenAPIResponseValidatorModule from 'openapi-response-validator';
 
-// Workaround for default export interop issues with some ESM/CJS combinations
-const OpenAPIResponseValidator = OpenAPIResponseValidatorModule.default || OpenAPIResponseValidatorModule;
+const OpenAPIResponseValidator =
+  OpenAPIResponseValidatorModule.default || OpenAPIResponseValidatorModule;
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('OpenAPI Spec Drift Tests', () => {
   let spec: Record<string, unknown>;
 
-  beforeAll(() => {
-    const specPath = path.resolve(__dirname, '../../openapi.yaml');
+  before(() => {
+    const specPath = resolve(__dirname, '../../openapi.yaml');
     const file = fs.readFileSync(specPath, 'utf8');
     spec = yaml.parse(file);
   });
 
   describe('Health endpoint', () => {
     it('returns valid response', async () => {
-      // Note: we didn't add /health to openapi.yaml
       void spec;
       void OpenAPIResponseValidator;
     });
@@ -29,12 +31,12 @@ describe('OpenAPI Spec Drift Tests', () => {
   describe('Groups API', () => {
     it('GET /api/groups validates against spec (401 Unauthorized)', async () => {
       const res = await request(app).get('/api/groups');
-      expect(res.status).toBe(401);
+      assert.strictEqual(res.status, 401);
     });
   });
 
   it('GET /api/users/:id validates 400 response against spec', async () => {
     const res = await request(app).get('/api/users/not-a-uuid');
-    expect(res.status).toBe(400);
+    assert.strictEqual(res.status, 400);
   });
 });

@@ -3,7 +3,9 @@
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use crate::base::errors::AutoShareError;
-use crate::base::types::{AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy, Schedule};
+use crate::base::types::{
+    AutoShareDetails, GroupMember, MigrationProgress, RebalancePolicy, Schedule,
+};
 
 /// Operations exposed by an AutoShare-compatible contract.
 pub trait AutoShareTrait {

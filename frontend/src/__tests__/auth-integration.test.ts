@@ -46,10 +46,11 @@ describe('connect -> challenge -> sign -> authenticated request integration', ()
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({
-          success: true,
-          data: { groups: [], total: 0 },
-        }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: { groups: [], total: 0 },
+          }),
       });
 
     const { requestChallenge, verifyChallenge } = await import('@/lib/api/client');
@@ -79,18 +80,26 @@ describe('connect -> challenge -> sign -> authenticated request integration', ()
     expect(tokens.address).toBe('GABC1234567890DEF');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:3001/auth/challenge', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ address: 'GABC1234567890DEF' }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:3001/auth/verify', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        address: 'GABC1234567890DEF',
-        nonce: 'abc123def456',
-        signature: 'signed-xdr-base64',
-      }),
-    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:3001/auth/challenge',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ address: 'GABC1234567890DEF' }),
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:3001/auth/verify',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          address: 'GABC1234567890DEF',
+          nonce: 'abc123def456',
+          signature: 'signed-xdr-base64',
+        }),
+      })
+    );
   });
 
   it('rejects when wallet is not available', async () => {
@@ -124,9 +133,7 @@ describe('connect -> challenge -> sign -> authenticated request integration', ()
     vi.mocked(wallet.getAddress).mockResolvedValueOnce(initialAddress);
 
     let currentAddress = initialAddress;
-    vi.mocked(wallet.getAddress).mockImplementation(
-      () => Promise.resolve(currentAddress)
-    );
+    vi.mocked(wallet.getAddress).mockImplementation(() => Promise.resolve(currentAddress));
 
     const accountChangedHandler = vi.fn(() => {
       currentAddress = newAddress;

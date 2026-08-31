@@ -75,11 +75,10 @@ describe('API client token management', () => {
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () =>
-        Promise.resolve({ success: true, data: { groups: [], total: 0 } }),
+      json: () => Promise.resolve({ success: true, data: { groups: [], total: 0 } }),
     });
 
-    await apiClient.apiGet('/api/groups');
+    await apiClient.apiClient.get('/api/groups');
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:3001/api/groups',
@@ -94,11 +93,10 @@ describe('API client token management', () => {
   it('does not include Authorization header when no token', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () =>
-        Promise.resolve({ success: true, data: { groups: [], total: 0 } }),
+      json: () => Promise.resolve({ success: true, data: { groups: [], total: 0 } }),
     });
 
-    await apiClient.apiGet('/api/groups');
+    await apiClient.apiClient.get('/api/groups');
 
     const callHeaders = fetchMock.mock.calls[0][1].headers;
     expect(callHeaders).not.toHaveProperty('Authorization');

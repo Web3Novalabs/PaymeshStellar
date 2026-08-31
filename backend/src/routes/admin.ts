@@ -19,21 +19,30 @@ const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFuncti
   return next();
 };
 
-router.get('/reconcile', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const groupId = req.query.group_id as string | undefined;
+router.get(
+  '/reconcile',
+  requireAuth,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const groupId = req.query.group_id as string | undefined;
 
-  try {
-    if (groupId) {
-      const report = await reconciliationService.reconcileGroup(groupId);
-      return res.status(200).json({ success: true, data: report || { message: 'No drift detected' } });
-    } else {
-      const report = await reconciliationService.reconcileAll();
-      return res.status(200).json({ success: true, data: report });
+    try {
+      if (groupId) {
+        const report = await reconciliationService.reconcileGroup(groupId);
+        return res
+          .status(200)
+          .json({ success: true, data: report || { message: 'No drift detected' } });
+      } else {
+        const report = await reconciliationService.reconcileAll();
+        return res.status(200).json({ success: true, data: report });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Reconciliation failed.';
+      return res
+        .status(500)
+        .json({ success: false, error: { code: 'INTERNAL_SERVER_ERROR', message } });
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Reconciliation failed.';
-    return res.status(500).json({ success: false, error: { code: 'INTERNAL_SERVER_ERROR', message } });
   }
-});
+);
 
 export default router;

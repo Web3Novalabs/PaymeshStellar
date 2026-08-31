@@ -15,7 +15,7 @@ const token1 = signToken({ sub: creator1 });
 
 function mockGroup(overrides: Partial<Group> = {}): Group {
   return {
-    id: 'test-uuid-123',
+    id: '11111111-1111-4111-8111-111111111111',
     groupId: 'group-on-chain-1',
     name: 'Engineering Team',
     creator: creator1,
@@ -218,7 +218,7 @@ describe('GET /api/groups/:id', () => {
     mock.method(groupsService, 'getById', async () => null);
 
     const res = await request(app)
-      .get('/api/groups/non-existent-id')
+      .get('/api/groups/22222222-2222-4222-8222-222222222222')
       .set('Authorization', `Bearer ${token1}`)
       .expect(404);
 
@@ -257,34 +257,34 @@ describe('GET /api/groups/:id', () => {
 });
 
 describe('GET /api/groups — pagination edge cases', () => {
-  it('treats a non-numeric limit as the default of 10', async () => {
-    const listMock = mock.method(groupsService, 'list', async () => ({
-      groups: [],
-      totalCount: 0,
-    }));
+  it('returns 400 for a non-numeric limit', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
 
     const res = await request(app)
       .get('/api/groups?limit=abc')
       .set('Authorization', `Bearer ${token1}`)
-      .expect(200);
+      .expect(400);
 
-    assert.strictEqual(res.body.data.pagination.limit, 10);
-    assert.strictEqual(listMock.mock.calls.length, 1);
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(listMock.mock.calls.length, 0);
   });
 
-  it('treats a negative limit as the default of 10', async () => {
-    const listMock = mock.method(groupsService, 'list', async () => ({
-      groups: [],
-      totalCount: 0,
-    }));
+  it('returns 400 for a negative limit', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
 
     const res = await request(app)
       .get('/api/groups?limit=-5')
       .set('Authorization', `Bearer ${token1}`)
-      .expect(200);
+      .expect(400);
 
-    assert.strictEqual(res.body.data.pagination.limit, 10);
-    assert.strictEqual(listMock.mock.calls.length, 1);
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(listMock.mock.calls.length, 0);
   });
 });
 
@@ -370,22 +370,19 @@ describe('GET /api/groups', () => {
     assert.strictEqual(opts.offset, 1);
   });
 
-  it('enforces a maximum limit of 100', async () => {
-    const listMock = mock.method(groupsService, 'list', async () => ({
-      groups: [],
-      totalCount: 0,
-    }));
+  it('returns 400 when limit exceeds 100', async () => {
+    const listMock = mock.method(groupsService, 'list', () => {
+      throw new Error('should not be called');
+    });
 
     const res = await request(app)
       .get('/api/groups?limit=150')
       .set('Authorization', `Bearer ${token1}`)
-      .expect(200);
+      .expect(400);
 
-    assert.strictEqual(res.body.data.pagination.limit, 100);
-
-    assert.strictEqual(listMock.mock.calls.length, 1);
-    const opts = listMock.mock.calls[0].arguments[0] as { limit: number };
-    assert.strictEqual(opts.limit, 100);
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
+    assert.strictEqual(listMock.mock.calls.length, 0);
   });
 
   it('returns empty result for out-of-range pagination', async () => {

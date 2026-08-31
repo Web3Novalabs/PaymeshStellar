@@ -21,14 +21,24 @@ describe('Stellar address validation', () => {
     });
 
     it('should reject addresses with wrong prefix', () => {
-      expect(isValidStellarAddress('AD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z2')).toBe(false);
-      expect(isValidStellarAddress('BD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z2')).toBe(false);
+      expect(
+        isValidStellarAddress('AD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z2')
+      ).toBe(false);
+      expect(
+        isValidStellarAddress('BD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z2')
+      ).toBe(false);
     });
 
     it('should reject addresses with invalid characters', () => {
-      expect(isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z!')).toBe(false);
-      expect(isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z ')).toBe(false);
-      expect(isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Zl')).toBe(false); // lowercase 'l'
+      expect(
+        isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z!')
+      ).toBe(false);
+      expect(
+        isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z ')
+      ).toBe(false);
+      expect(
+        isValidStellarAddress('GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Zl')
+      ).toBe(false); // lowercase 'l'
     });
 
     it('should reject empty string', () => {
@@ -36,17 +46,17 @@ describe('Stellar address validation', () => {
     });
 
     it('should reject null', () => {
-      expect(isValidStellarAddress(null as any)).toBe(false);
+      expect(isValidStellarAddress(null as unknown as string)).toBe(false);
     });
 
     it('should reject undefined', () => {
-      expect(isValidStellarAddress(undefined as any)).toBe(false);
+      expect(isValidStellarAddress(undefined as unknown as string)).toBe(false);
     });
 
     it('should reject non-string types', () => {
-      expect(isValidStellarAddress(123 as any)).toBe(false);
-      expect(isValidStellarAddress({} as any)).toBe(false);
-      expect(isValidStellarAddress([] as any)).toBe(false);
+      expect(isValidStellarAddress(123 as unknown as string)).toBe(false);
+      expect(isValidStellarAddress({} as unknown as string)).toBe(false);
+      expect(isValidStellarAddress([] as unknown as string)).toBe(false);
     });
 
     it('should reject addresses that pass regex but fail checksum', () => {
@@ -56,7 +66,7 @@ describe('Stellar address validation', () => {
         'GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z4',
         'GD5J6PHFVCHGE5H4ZL3FWJQSIHZO3SKN6QSE5YD3T3Y5R7E8N9X0Y1Z5',
       ];
-      
+
       addressesWithBadChecksums.forEach((address) => {
         expect(isValidStellarAddress(address)).toBe(false);
       });
@@ -68,7 +78,7 @@ describe('Stellar address validation', () => {
         'GABCD4EF5GH6IJ7KL8MN9OP0QR1ST2UV3WX4YZ5AB6CD7EF8GH9IJ0KL',
         'G1234ABCD5678EFGH9012IJKL3456MNOP7890QRST1234UVWX5678YZ90',
       ];
-      
+
       validAddresses.forEach((address) => {
         expect(isValidStellarAddress(address)).toBe(true);
       });

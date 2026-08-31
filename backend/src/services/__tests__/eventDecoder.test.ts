@@ -187,7 +187,10 @@ describe('decodeIndexerEvent — malformed payloads are skipped, never thrown', 
 
   it('skips an event whose namespace topic is not "autoshare"', () => {
     const raw = makeRawEvent({
-      topic: [nativeToScVal('somethingelse', { type: 'symbol' }), nativeToScVal('created', { type: 'symbol' })],
+      topic: [
+        nativeToScVal('somethingelse', { type: 'symbol' }),
+        nativeToScVal('created', { type: 'symbol' }),
+      ],
       value: xdr.ScVal.scvVoid(),
       ledger: 505,
     });
@@ -201,7 +204,10 @@ describe('decodeIndexerEvent — malformed payloads are skipped, never thrown', 
   it('skips a "members_updated" event whose count field is not numeric', () => {
     const raw = makeRawEvent({
       topic: autoshareTopic('members_updated'),
-      value: xdr.ScVal.scvVec([xdr.ScVal.scvBytes(Buffer.alloc(32, 1)), xdr.ScVal.scvString('not-a-number')]),
+      value: xdr.ScVal.scvVec([
+        xdr.ScVal.scvBytes(Buffer.alloc(32, 1)),
+        xdr.ScVal.scvString('not-a-number'),
+      ]),
       ledger: 506,
     });
     const result = decodeIndexerEvent(raw);

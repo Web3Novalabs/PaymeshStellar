@@ -45,7 +45,11 @@ export default function MemberEditor({
     onChange(members.filter((m) => m.id !== id));
   };
 
-  const handleMemberChange = (id: string, field: keyof MemberAllocation, value: string | number | boolean) => {
+  const handleMemberChange = (
+    id: string,
+    field: keyof MemberAllocation,
+    value: string | number | boolean
+  ) => {
     onChange(
       members.map((m) =>
         m.id === id
@@ -100,7 +104,9 @@ export default function MemberEditor({
       </div>
 
       {members.length === 0 ? (
-        <p className="text-sm text-gray-500 italic">No members added yet. Click "Add Member" to begin.</p>
+        <p className="text-sm text-gray-500 italic">
+          No members added yet. Click &quot;Add Member&quot; to begin.
+        </p>
       ) : (
         <div className="space-y-3">
           {members.map((member, index) => {
@@ -196,7 +202,8 @@ export default function MemberEditor({
       {members.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-sm text-gray-600">
-            <span className="font-semibold">{members.length}</span> member{members.length !== 1 ? 's' : ''} added
+            <span className="font-semibold">{members.length}</span> member
+            {members.length !== 1 ? 's' : ''} added
           </p>
         </div>
       )}

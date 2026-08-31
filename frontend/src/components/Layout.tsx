@@ -26,7 +26,10 @@ export default function Layout({ children, sidebar, className = '' }: LayoutProp
             <Link href="/groups" className="transition hover:text-gray-900 dark:hover:text-gray-50">
               Groups
             </Link>
-            <Link href="/dashboard" className="transition hover:text-gray-900 dark:hover:text-gray-50">
+            <Link
+              href="/dashboard"
+              className="transition hover:text-gray-900 dark:hover:text-gray-50"
+            >
               Dashboard
             </Link>
             <div className="flex items-center gap-2">

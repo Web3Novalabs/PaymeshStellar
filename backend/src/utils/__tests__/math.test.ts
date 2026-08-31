@@ -8,11 +8,11 @@ test('Math Utils', async (t) => {
     assert.equal(percentToBps(50), 5000);
     assert.equal(percentToBps(1), 100);
     assert.equal(percentToBps(0.01), 1);
-    
+
     // Testing rounding behavior for a value that does not divide evenly (e.g. 0.0001 precision)
     // 33.3333% -> 3333.33 -> rounds to 3333
     assert.equal(percentToBps(33.3333), 3333);
-    
+
     // 33.3355% -> 3333.55 -> rounds to 3334
     assert.equal(percentToBps(33.3355), 3334);
   });

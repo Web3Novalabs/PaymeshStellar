@@ -23,7 +23,9 @@ export function createFreighterAdapter(): WalletAdapter {
     async getAddress(): Promise<string> {
       const mod = await import('@stellar/freighter-api');
       if (typeof mod.getAddress !== 'function') {
-        throw new Error('Freighter is not installed. Please install the Freighter browser extension.');
+        throw new Error(
+          'Freighter is not installed. Please install the Freighter browser extension.'
+        );
       }
       const result = await mod.getAddress();
       if (result.error) {

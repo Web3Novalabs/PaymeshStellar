@@ -47,8 +47,17 @@ export interface BackfillSummary {
  * persistCursor: false. Exported so tests can drive it against a scripted
  * fake client without a real RPC endpoint or a spawned process.
  */
-export async function runBackfill(fromLedger: number, toLedger: number, options: BackfillOptions = {}): Promise<BackfillSummary> {
-  if (!Number.isInteger(fromLedger) || !Number.isInteger(toLedger) || fromLedger < 0 || toLedger < fromLedger) {
+export async function runBackfill(
+  fromLedger: number,
+  toLedger: number,
+  options: BackfillOptions = {}
+): Promise<BackfillSummary> {
+  if (
+    !Number.isInteger(fromLedger) ||
+    !Number.isInteger(toLedger) ||
+    fromLedger < 0 ||
+    toLedger < fromLedger
+  ) {
     throw new Error(`Invalid ledger range: --from ${fromLedger} --to ${toLedger}`);
   }
 
@@ -56,7 +65,8 @@ export async function runBackfill(fromLedger: number, toLedger: number, options:
   const contractId = options.contractId ?? config.contractId;
   const pageLimit = options.pageLimit ?? config.pageLimit;
   const client = options.client ?? new RpcSorobanEventsClient(config.rpcUrl);
-  const chainReader = options.chainReader ?? new SorobanChainReader(config.rpcUrl, contractId, client);
+  const chainReader =
+    options.chainReader ?? new SorobanChainReader(config.rpcUrl, contractId, client);
 
   let cursorLedger = fromLedger;
   let pages = 0;
@@ -80,7 +90,10 @@ export async function runBackfill(fromLedger: number, toLedger: number, options:
         contractId,
         events: page.events,
         chainReader,
-        cursor: { lastLedger: page.events[page.events.length - 1].ledger, pagingToken: page.cursor },
+        cursor: {
+          lastLedger: page.events[page.events.length - 1].ledger,
+          pagingToken: page.cursor,
+        },
         logger,
         persistCursor: false,
       });
@@ -133,7 +146,10 @@ async function main(): Promise<void> {
 const isMainModule = Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMainModule) {
   main().catch((err: unknown) => {
-    logger.error({ err: err instanceof Error ? { message: err.message, stack: err.stack } : String(err) }, 'backfill: fatal error');
+    logger.error(
+      { err: err instanceof Error ? { message: err.message, stack: err.stack } : String(err) },
+      'backfill: fatal error'
+    );
     process.exit(1);
   });
 }

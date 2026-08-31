@@ -40,7 +40,11 @@ const STORAGE_KEY = 'group-wizard-state';
  * - State survives back/forward navigation and full page reload (URL state + sessionStorage)
  * - Browser back button moves between steps instead of dumping user out
  */
-export default function GroupWizard({ initialState, onSubmit, isSubmitting = false }: GroupWizardProps) {
+export default function GroupWizard({
+  initialState,
+  onSubmit,
+  isSubmitting = false,
+}: GroupWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, setState] = useState<WizardState>(() => {
@@ -83,7 +87,8 @@ export default function GroupWizard({ initialState, onSubmit, isSubmitting = fal
     url.searchParams.set('step', state.step);
     if (state.details.name) url.searchParams.set('name', state.details.name);
     if (state.details.paymentToken) url.searchParams.set('token', state.details.paymentToken);
-    if (state.details.usageCount) url.searchParams.set('usage', state.details.usageCount.toString());
+    if (state.details.usageCount)
+      url.searchParams.set('usage', state.details.usageCount.toString());
     url.searchParams.set('members', state.members.length.toString());
 
     window.history.replaceState({}, '', url.toString());
@@ -197,8 +202,18 @@ export default function GroupWizard({ initialState, onSubmit, isSubmitting = fal
                     aria-label={`Go to ${step} step`}
                   >
                     {isCompleted ? (
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="h-6 w-6"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                     ) : (
                       index + 1
@@ -287,7 +302,13 @@ export default function GroupWizard({ initialState, onSubmit, isSubmitting = fal
 }
 
 // Step components
-function DetailsStep({ details, onChange }: { details: GroupDetails; onChange: (details: GroupDetails) => void }) {
+function DetailsStep({
+  details,
+  onChange,
+}: {
+  details: GroupDetails;
+  onChange: (details: GroupDetails) => void;
+}) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="mb-4 text-xl font-semibold text-gray-900">Group Details</h2>
@@ -337,7 +358,9 @@ function DetailsStep({ details, onChange }: { details: GroupDetails; onChange: (
             type="number"
             min="1"
             value={details.usageCount}
-            onChange={(e) => onChange({ ...details, usageCount: parseInt(e.target.value, 10) || 1 })}
+            onChange={(e) =>
+              onChange({ ...details, usageCount: parseInt(e.target.value, 10) || 1 })
+            }
             className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             aria-describedby="usage-count-help"
           />
@@ -364,7 +387,8 @@ function MembersStep({
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-semibold text-gray-900">Members</h2>
         <p className="text-sm text-gray-600">
-          Add members and allocate basis points. Total must equal exactly 10,000 basis points (100%).
+          Add members and allocate basis points. Total must equal exactly 10,000 basis points
+          (100%).
         </p>
         <div className="mt-4">
           <MemberEditor members={members} onChange={onChange} disabled={disabled} />
@@ -443,8 +467,8 @@ function ReviewStep({
 
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <p className="text-sm text-blue-800">
-            <strong>Ready to {isEditMode ? 'update' : 'create'}.</strong> Review the details above and click the
-            button below to sign the transaction with your wallet.
+            <strong>Ready to {isEditMode ? 'update' : 'create'}.</strong> Review the details above
+            and click the button below to sign the transaction with your wallet.
           </p>
         </div>
       </div>
@@ -464,15 +488,16 @@ function parseURLState(searchParams: URLSearchParams): Partial<WizardState> {
   if (step && STEP_ORDER.includes(step)) {
     result.step = step;
   }
-  if (name) {
-    result.details = { ...result.details, name };
+
+  const details: Partial<GroupDetails> = {};
+  if (name) details.name = name;
+  if (token) details.paymentToken = token;
+  if (usage) details.usageCount = parseInt(usage, 10) || 1;
+
+  if (Object.keys(details).length > 0) {
+    result.details = details as GroupDetails;
   }
-  if (token) {
-    result.details = { ...result.details, paymentToken: token };
-  }
-  if (usage) {
-    result.details = { ...result.details, usageCount: parseInt(usage, 10) || 1 };
-  }
+
   if (membersCount) {
     // Members are not stored in URL for size reasons, just the count
   }
@@ -488,7 +513,8 @@ function deepMerge<T>(target: T, ...sources: Partial<T>[]): T {
     for (const key in source) {
       if (isObject(source[key])) {
         if (!target[key]) Object.assign(target, { [key]: {} });
-        deepMerge(target[key], source[key]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        deepMerge((target as any)[key], (source as any)[key]);
       } else {
         Object.assign(target, { [key]: source[key] });
       }
@@ -499,5 +525,5 @@ function deepMerge<T>(target: T, ...sources: Partial<T>[]): T {
 }
 
 function isObject(item: unknown): item is Record<string, unknown> {
-  return item && typeof item === 'object' && !Array.isArray(item);
+  return Boolean(item) && typeof item === 'object' && !Array.isArray(item);
 }

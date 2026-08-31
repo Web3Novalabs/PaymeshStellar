@@ -18,8 +18,9 @@ mod prop_tests;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
-mod test_schedule;
 mod test_admin;
+#[cfg(test)]
+mod test_schedule;
 
 use base::auth::{
     require_admin, require_group_creator, require_migration_current, require_not_paused,
@@ -328,7 +329,7 @@ mod contract_impl {
                 .persistent()
                 .set(&DataKey::Group(id.clone()), &details);
 
-            events::members_updated(&env, &id, count as u32);
+            events::members_updated(&env, &id, count);
             Ok(())
         }
 
@@ -362,7 +363,7 @@ mod contract_impl {
 
             // Rebalance existing members to make room for `member.percentage`
             let mut members = details.members;
-            if members.len() == 0 {
+            if members.is_empty() {
                 // adding first member must have exactly 10_000
                 if member.percentage != 10_000 {
                     return Err(AutoShareError::InvalidPercentage);
@@ -415,7 +416,7 @@ mod contract_impl {
             let idx = removed_idx.ok_or(AutoShareError::MemberNotFound)?;
             members.remove(idx);
 
-            if members.len() == 0 {
+            if members.is_empty() {
                 return Err(AutoShareError::EmptyMembers);
             }
 
@@ -478,7 +479,7 @@ mod contract_impl {
 
             members.remove(idx); // temporarly remove to rebalance others
 
-            if members.len() == 0 {
+            if members.is_empty() {
                 // If only 1 member, percentage must be 10_000
                 if new_bps != 10_000 {
                     return Err(AutoShareError::InvalidPercentage);
@@ -954,7 +955,7 @@ mod contract_impl {
         ) -> Result<(), AutoShareError> {
             require_not_paused(&env)?;
             require_migration_current(&env)?;
-            
+
             let details = validate_group_exists(&env, &id)?;
             require_group_creator(&env, &details, &caller)?;
 
@@ -985,10 +986,14 @@ mod contract_impl {
             Ok(())
         }
 
-        fn execute_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError> {
+        fn execute_schedule(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+        ) -> Result<(), AutoShareError> {
             require_not_paused(&env)?;
             require_migration_current(&env)?;
-            
+
             caller.require_auth(); // Keeper
 
             let key = DataKey::Schedule(id.clone());
@@ -1010,7 +1015,7 @@ mod contract_impl {
             schedule.funder.require_auth();
 
             let details = validate_group_exists(&env, &id).expect("group not found");
-            
+
             if details.members.is_empty() {
                 return Err(AutoShareError::EmptyMembers);
             }
@@ -1019,23 +1024,27 @@ mod contract_impl {
             let runs_to_execute = runs_due.min(MAX_CATCHUP).min(schedule.remaining_runs);
 
             let token_client = token::Client::new(&env, &details.payment_token);
-            let total_amount = schedule.amount.checked_mul(runs_to_execute as i128).expect("amount overflow");
-            
+            let total_amount = schedule
+                .amount
+                .checked_mul(runs_to_execute as i128)
+                .expect("amount overflow");
+
             if token_client.balance(&schedule.funder) < total_amount {
                 return Err(AutoShareError::InsufficientBalance);
             }
 
             for _ in 0..runs_to_execute {
-                let shares = base::utils::distribute_amounts(&env, schedule.amount, &details.members)
-                    .expect("failed to distribute amounts");
-                
+                let shares =
+                    base::utils::distribute_amounts(&env, schedule.amount, &details.members)
+                        .expect("failed to distribute amounts");
+
                 for (i, member) in details.members.iter().enumerate() {
                     let share = shares.get(i as u32).unwrap();
                     if share > 0 {
                         token_client.transfer(&schedule.funder, &member.address, &share);
                     }
                 }
-                
+
                 events::schedule_executed(&env, &id, schedule.remaining_runs);
                 schedule.remaining_runs -= 1;
             }
@@ -1052,10 +1061,14 @@ mod contract_impl {
             Ok(())
         }
 
-        fn cancel_schedule(env: Env, id: BytesN<32>, caller: Address) -> Result<(), AutoShareError> {
+        fn cancel_schedule(
+            env: Env,
+            id: BytesN<32>,
+            caller: Address,
+        ) -> Result<(), AutoShareError> {
             require_not_paused(&env)?;
             require_migration_current(&env)?;
-            
+
             let details = validate_group_exists(&env, &id)?;
             require_group_creator(&env, &details, &caller)?;
 
@@ -1065,17 +1078,19 @@ mod contract_impl {
                 .persistent()
                 .get(&key)
                 .expect("schedule not found");
-                
             schedule.active = false;
             env.storage().persistent().set(&key, &schedule);
             events::schedule_cancelled(&env, &id);
-            
+
             Ok(())
         }
 
         fn get_schedule(env: Env, id: BytesN<32>) -> Result<Schedule, AutoShareError> {
             let key = DataKey::Schedule(id);
-            env.storage().persistent().get(&key).ok_or(AutoShareError::GroupNotFound)
+            env.storage()
+                .persistent()
+                .get(&key)
+                .ok_or(AutoShareError::GroupNotFound)
         }
     }
 }

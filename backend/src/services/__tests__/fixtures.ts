@@ -36,7 +36,10 @@ function bytesScVal(hex: string): xdr.ScVal {
 }
 
 export function autoshareTopic(eventName: string): xdr.ScVal[] {
-  return [nativeToScVal('autoshare', { type: 'symbol' }), nativeToScVal(eventName, { type: 'symbol' })];
+  return [
+    nativeToScVal('autoshare', { type: 'symbol' }),
+    nativeToScVal(eventName, { type: 'symbol' }),
+  ];
 }
 
 export function createdEventValue(idHex: string, creator: string): xdr.ScVal {
@@ -48,7 +51,11 @@ export function membersUpdatedEventValue(idHex: string, memberCount: number): xd
 }
 
 export function distributedEventValue(idHex: string, from: string, amount: bigint): xdr.ScVal {
-  return tupleScVal([bytesScVal(idHex), addressScVal(from), nativeToScVal(amount, { type: 'i128' })]);
+  return tupleScVal([
+    bytesScVal(idHex),
+    addressScVal(from),
+    nativeToScVal(amount, { type: 'i128' }),
+  ]);
 }
 
 let eventCounter = 0;
@@ -73,7 +80,12 @@ export function makeRawEvent(opts: RawEventOpts): IndexerEvent {
   };
 }
 
-export function createdEvent(ledger: number, idHex: string, creator: string, txHash?: string): IndexerEvent {
+export function createdEvent(
+  ledger: number,
+  idHex: string,
+  creator: string,
+  txHash?: string
+): IndexerEvent {
   return makeRawEvent({
     topic: autoshareTopic('created'),
     value: createdEventValue(idHex, creator),
@@ -118,7 +130,11 @@ export function unknownEvent(ledger: number, eventName = 'paused'): IndexerEvent
 
 /** "created" topic with a body that isn't a 2-element tuple — must be reported as malformed, not thrown. */
 export function malformedEvent(ledger: number, eventName = 'created'): IndexerEvent {
-  return makeRawEvent({ topic: autoshareTopic(eventName), value: nativeToScVal(42, { type: 'u32' }), ledger });
+  return makeRawEvent({
+    topic: autoshareTopic(eventName),
+    value: nativeToScVal(42, { type: 'u32' }),
+    ledger,
+  });
 }
 
 export function page(

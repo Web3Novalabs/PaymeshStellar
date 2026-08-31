@@ -134,8 +134,10 @@ pub fn escrow_claimed(env: &Env, id: &BytesN<32>, member: &Address, to: &Address
 ///
 /// Topics are `"autoshare"` and `"schedule_created"`. The payload is `(id, funder)`.
 pub fn schedule_created(env: &Env, id: &BytesN<32>, funder: &Address) {
-    env.events()
-        .publish(("autoshare", "schedule_created"), (id.clone(), funder.clone()));
+    env.events().publish(
+        ("autoshare", "schedule_created"),
+        (id.clone(), funder.clone()),
+    );
 }
 
 /// Publishes an `("autoshare", "schedule_executed")` event.

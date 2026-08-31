@@ -1,8 +1,6 @@
-#![cfg(test)]
-
 use crate::{AutoShareContract, AutoShareContractClient};
 use soroban_sdk::testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke};
-use soroban_sdk::{vec, Address, BytesN, Env, IntoVal, String, Symbol};
+use soroban_sdk::{vec, Address, BytesN, Env, IntoVal, String, TryIntoVal};
 
 // 1. init twice returns AlreadyInitialized; state from the first call is untouched.
 #[test]
@@ -72,23 +70,18 @@ fn test_pause_unauthorized_and_authorized() {
     let events = env.events().all();
     let mut found = false;
     for event in events.iter() {
-        if event.1 == contract_id {
-            if let Ok(topics) = event.2.clone().try_into_val(&env) {
-                let topics_vec: soroban_sdk::Vec<soroban_sdk::Val> = topics;
-                if topics_vec.len() == 2 {
-                    if let Ok(topic0) =
-                        soroban_sdk::Symbol::try_from_val(&env, &topics_vec.get(0).unwrap())
+        if event.0 == contract_id {
+            let topics = event.1;
+            if topics.len() == 2 {
+                let t0: Result<String, _> = topics.get(0).unwrap().try_into_val(&env);
+                let t1: Result<String, _> = topics.get(1).unwrap().try_into_val(&env);
+
+                if let (Ok(topic0), Ok(topic1)) = (t0, t1) {
+                    if topic0 == String::from_str(&env, "autoshare")
+                        && topic1 == String::from_str(&env, "paused")
                     {
-                        if let Ok(topic1) =
-                            soroban_sdk::Symbol::try_from_val(&env, &topics_vec.get(1).unwrap())
-                        {
-                            if topic0 == Symbol::new(&env, "autoshare")
-                                && topic1 == Symbol::new(&env, "paused")
-                            {
-                                found = true;
-                                break;
-                            }
-                        }
+                        found = true;
+                        break;
                     }
                 }
             }
@@ -136,6 +129,7 @@ fn test_distribute_paused() {
                 percentage: 10000,
             },
         ],
+        &1,
     );
 
     client.pause(&admin);

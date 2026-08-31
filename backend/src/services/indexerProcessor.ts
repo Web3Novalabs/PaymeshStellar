@@ -103,21 +103,37 @@ export async function processEventBatch(params: ProcessBatchParams): Promise<Pro
   }
 
   logger.info(
-    { ledger: cursor.lastLedger, cursor: cursor.pagingToken, eventCount: events.length, persisted, skipped },
+    {
+      ledger: cursor.lastLedger,
+      cursor: cursor.pagingToken,
+      eventCount: events.length,
+      persisted,
+      skipped,
+    },
     'indexer: batch committed'
   );
 
   return { processed: events.length, persisted, skipped, skippedDetails };
 }
 
-async function applyEvent(client: PoolClient, chainReader: ChainReader, event: DecodedIndexerEvent): Promise<void> {
+async function applyEvent(
+  client: PoolClient,
+  chainReader: ChainReader,
+  event: DecodedIndexerEvent
+): Promise<void> {
   switch (event.kind) {
     case 'created':
     case 'members_updated':
       await upsertGroupFromChain(client, chainReader, event.groupIdHex);
       return;
     case 'distributed':
-      await insertDistribution(client, event.groupIdHex, event.amount, event.txHash, event.ledgerClosedAt);
+      await insertDistribution(
+        client,
+        event.groupIdHex,
+        event.amount,
+        event.txHash,
+        event.ledgerClosedAt
+      );
       return;
   }
 
@@ -133,10 +149,16 @@ async function applyEvent(client: PoolClient, chainReader: ChainReader, event: D
  * Re-fetching is what makes members_updated (and a duplicate created)
  * correct without a second, event-payload-driven code path.
  */
-async function upsertGroupFromChain(client: PoolClient, chainReader: ChainReader, groupIdHex: string): Promise<void> {
+async function upsertGroupFromChain(
+  client: PoolClient,
+  chainReader: ChainReader,
+  groupIdHex: string
+): Promise<void> {
   const chainGroup = await chainReader.getGroup(groupIdHex);
   if (!chainGroup) {
-    throw new Error(`group ${groupIdHex} not found in contract storage (event likely stale/reorged)`);
+    throw new Error(
+      `group ${groupIdHex} not found in contract storage (event likely stale/reorged)`
+    );
   }
 
   const userRes = await client.query<{ id: string }>(
@@ -163,7 +185,7 @@ async function upsertGroupFromChain(client: PoolClient, chainReader: ChainReader
   await client.query('DELETE FROM members WHERE group_id = $1', [internalGroupId]);
   for (const member of chainGroup.members) {
     await client.query(
-      `INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)`,
+      'INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)',
       [internalGroupId, member.address, parseFloat(bpsToPercent(member.shareBps))]
     );
   }
@@ -176,12 +198,15 @@ async function insertDistribution(
   txHash: string,
   ledgerClosedAt: string
 ): Promise<void> {
-  const groupRes = await client.query<GroupIdRow>('SELECT id, token FROM groups WHERE onchain_group_id = $1', [
-    groupIdHex,
-  ]);
+  const groupRes = await client.query<GroupIdRow>(
+    'SELECT id, token FROM groups WHERE onchain_group_id = $1',
+    [groupIdHex]
+  );
   const group = groupRes.rows[0];
   if (!group) {
-    throw new Error(`group ${groupIdHex} not indexed yet — distributed event has no parent group row`);
+    throw new Error(
+      `group ${groupIdHex} not indexed yet — distributed event has no parent group row`
+    );
   }
 
   await client.query(

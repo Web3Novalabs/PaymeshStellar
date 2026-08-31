@@ -123,24 +123,45 @@ function buildDetailsScVal(opts: {
 }): xdr.ScVal {
   const memberEntries = opts.members.map((m) =>
     xdr.ScVal.scvMap([
-      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('address'), val: Address.fromString(m.address).toScVal() }),
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol('address'),
+        val: Address.fromString(m.address).toScVal(),
+      }),
       new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('name'), val: xdr.ScVal.scvString(m.name) }),
-      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('percentage'), val: nativeToScVal(m.percentage, { type: 'u32' }) }),
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol('percentage'),
+        val: nativeToScVal(m.percentage, { type: 'u32' }),
+      }),
     ])
   );
 
   const entries = [
-    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('creator'), val: Address.fromString(opts.creator).toScVal() }),
-    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('group_version'), val: nativeToScVal(1, { type: 'u32' }) }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('creator'),
+      val: Address.fromString(opts.creator).toScVal(),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('group_version'),
+      val: nativeToScVal(1, { type: 'u32' }),
+    }),
     new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('id'), val: xdr.ScVal.scvBytes(opts.id) }),
-    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('members'), val: xdr.ScVal.scvVec(memberEntries) }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('members'),
+      val: xdr.ScVal.scvVec(memberEntries),
+    }),
     new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('name'), val: xdr.ScVal.scvString(opts.name) }),
     new xdr.ScMapEntry({
       key: xdr.ScVal.scvSymbol('payment_token'),
       val: Address.fromString(opts.paymentToken).toScVal(),
     }),
-    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('usage_count'), val: nativeToScVal(0, { type: 'u32' }) }),
-    new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('version'), val: nativeToScVal(3, { type: 'u32' }) }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('usage_count'),
+      val: nativeToScVal(0, { type: 'u32' }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('version'),
+      val: nativeToScVal(3, { type: 'u32' }),
+    }),
   ];
 
   return xdr.ScVal.scvMap(entries);
@@ -216,7 +237,10 @@ describe('scval.decodeGroupDetails', () => {
 
   it('throws ScValDecodeError when a required field is missing', () => {
     const entries = [
-      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('name'), val: xdr.ScVal.scvString('No id field') }),
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol('name'),
+        val: xdr.ScVal.scvString('No id field'),
+      }),
     ];
     assert.throws(() => decodeGroupDetails(xdr.ScVal.scvMap(entries)), ScValDecodeError);
   });

@@ -147,36 +147,40 @@ router.get(
  * GET /api/users/:id
  * Retrieve a user profile by ID.
  */
-router.get('/:id', validate(GetUserSchema), async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
-  const { id } = req.params;
+router.get(
+  '/:id',
+  validate(GetUserSchema),
+  async (req: AuthenticatedRequest, res: Response<ApiResponse<UserResponse>>) => {
+    const { id } = req.params;
 
-  try {
-    const user = await usersService.getById(id);
+    try {
+      const user = await usersService.getById(id);
 
-    if (!user) {
-      return res.status(404).json({
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'User profile not found.',
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: userToResponse(user),
+      });
+    } catch (error) {
+      return res.status(500).json({
         success: false,
         error: {
-          code: 'NOT_FOUND',
-          message: 'User profile not found.',
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to retrieve user profile.',
         },
       });
     }
-
-    return res.status(200).json({
-      success: true,
-      data: userToResponse(user),
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to retrieve user profile.',
-      },
-    });
   }
-});
+);
 
 /**
  * PUT /api/users/:id

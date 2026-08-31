@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 
-export type SubmissionStage = 'idle' | 'simulating' | 'awaiting_signature' | 'submitting' | 'confirming' | 'success' | 'error';
+export type SubmissionStage =
+  'idle' | 'simulating' | 'awaiting_signature' | 'submitting' | 'confirming' | 'success' | 'error';
 
 export interface SubmissionState {
   stage: SubmissionStage;

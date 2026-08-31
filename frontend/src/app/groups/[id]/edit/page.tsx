@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import GroupWizard, { WizardState } from '@/components/GroupWizard';
-import { validateAllocation, MemberAllocation } from '@/lib/utils/allocation';
 
 export default function EditGroupPage() {
   const router = useRouter();
@@ -97,13 +96,6 @@ export default function EditGroupPage() {
     setSubmitError(null);
 
     try {
-      // Calculate diff against loaded group
-      const membersDiff = state.members.map((m) => ({
-        address: m.address,
-        name: m.name,
-        percentage: m.basisPoints,
-      }));
-
       // TODO: Replace with actual API call
       // const response = await fetch(`/api/groups/${groupId}`, {
       //   method: 'PUT',
@@ -120,18 +112,6 @@ export default function EditGroupPage() {
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to update group');
       setIsSubmitting(false);
-    }
-  };
-
-  const handleStateChange = (newState: WizardState) => {
-    if (initialState) {
-      // Check if there are unsaved changes
-      const hasChanges =
-        newState.details.name !== initialState.details?.name ||
-        newState.details.paymentToken !== initialState.details?.paymentToken ||
-        newState.details.usageCount !== initialState.details?.usageCount ||
-        JSON.stringify(newState.members) !== JSON.stringify(initialState.members);
-      setHasUnsavedChanges(hasChanges);
     }
   };
 
@@ -176,9 +156,14 @@ export default function EditGroupPage() {
       </nav>
 
       {hasUnsavedChanges && (
-        <div className="mb-6 rounded-lg border border-yellow-300 bg-yellow-50 p-4" role="status" aria-live="polite">
+        <div
+          className="mb-6 rounded-lg border border-yellow-300 bg-yellow-50 p-4"
+          role="status"
+          aria-live="polite"
+        >
           <p className="text-sm text-yellow-800">
-            <strong>Unsaved changes:</strong> You have unsaved changes. Don't forget to save before leaving.
+            <strong>Unsaved changes:</strong> You have unsaved changes. Don&apos;t forget to save
+            before leaving.
           </p>
         </div>
       )}
@@ -195,11 +180,13 @@ export default function EditGroupPage() {
         </div>
       )}
 
-      <GroupWizard
-        initialState={initialState}
-        onSubmit={handleSubmit}
-        isSubmitting={isSubmitting}
-      />
+      <Suspense fallback={<div>Loading wizard...</div>}>
+        <GroupWizard
+          initialState={initialState}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+        />
+      </Suspense>
     </div>
   );
 }

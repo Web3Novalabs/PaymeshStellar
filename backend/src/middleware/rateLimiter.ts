@@ -9,7 +9,7 @@ export const apiLimiter = rateLimit({
     success: false,
     error: {
       code: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many requests from this IP, please try again after 15 minutes'
-    }
-  }
+      message: 'Too many requests from this IP, please try again after 15 minutes',
+    },
+  },
 });

@@ -12,7 +12,14 @@
 
 import { xdr } from '@stellar/stellar-sdk';
 import { IndexerEvent } from './sorobanRpcClient.js';
-import { decodeSymbol, decodeBytesHex, decodeAddress, decodeBigInt, decodeU32, ScValDecodeError } from './scval.js';
+import {
+  decodeSymbol,
+  decodeBytesHex,
+  decodeAddress,
+  decodeBigInt,
+  decodeU32,
+  ScValDecodeError,
+} from './scval.js';
 
 export interface CreatedEvent {
   kind: 'created';
@@ -55,8 +62,7 @@ export interface SkippedEvent {
 }
 
 export type EventDecodeResult =
-  | { status: 'decoded'; event: DecodedIndexerEvent }
-  | { status: 'skipped'; skipped: SkippedEvent };
+  { status: 'decoded'; event: DecodedIndexerEvent } | { status: 'skipped'; skipped: SkippedEvent };
 
 function decodeTupleElements(val: xdr.ScVal, expectedLength: number): xdr.ScVal[] {
   if (val.switch().name !== 'scvVec') {
@@ -67,7 +73,9 @@ function decodeTupleElements(val: xdr.ScVal, expectedLength: number): xdr.ScVal[
     throw new ScValDecodeError('Expected a non-empty tuple (Vec) ScVal for the event body');
   }
   if (elements.length !== expectedLength) {
-    throw new ScValDecodeError(`Expected a ${expectedLength}-element tuple, got ${elements.length}`);
+    throw new ScValDecodeError(
+      `Expected a ${expectedLength}-element tuple, got ${elements.length}`
+    );
   }
   return elements;
 }

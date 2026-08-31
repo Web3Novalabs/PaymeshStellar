@@ -54,17 +54,19 @@ export class ReconciliationService {
    */
   async reconcileGroup(onchainGroupId: string): Promise<GroupDriftReport | null> {
     const drifts: DriftVariant[] = [];
-    
+
     // 1. Load from Postgres
     const offchainGroup = await groupsService.getByGroupId(onchainGroupId);
-    
+
     // 2. Load from Chain
     let onchainGroup: ChainGroup | null = null;
     try {
       onchainGroup = await this.chainReader.getGroup(onchainGroupId);
     } catch (error) {
       // Transport error aborts everything.
-      throw new Error(`Transport error during chain read for group ${onchainGroupId}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Transport error during chain read for group ${onchainGroupId}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     if (!offchainGroup && !onchainGroup) {
@@ -78,10 +80,20 @@ export class ReconciliationService {
     } else if (offchainGroup && onchainGroup) {
       // Both exist, diff fields
       if (offchainGroup.creator !== onchainGroup.creator) {
-        drifts.push({ type: 'FieldMismatch', field: 'creator', onchain: onchainGroup.creator, offchain: offchainGroup.creator });
+        drifts.push({
+          type: 'FieldMismatch',
+          field: 'creator',
+          onchain: onchainGroup.creator,
+          offchain: offchainGroup.creator,
+        });
       }
       if (offchainGroup.paymentToken !== onchainGroup.token) {
-        drifts.push({ type: 'FieldMismatch', field: 'paymentToken', onchain: onchainGroup.token, offchain: offchainGroup.paymentToken });
+        drifts.push({
+          type: 'FieldMismatch',
+          field: 'paymentToken',
+          onchain: onchainGroup.token,
+          offchain: offchainGroup.paymentToken,
+        });
       }
 
       // Diff members
@@ -127,7 +139,7 @@ export class ReconciliationService {
     }
 
     if (drifts.length > 0) {
-      drifts.forEach(d => logger.warn({ groupId: onchainGroupId, drift: d }, 'Drift detected'));
+      drifts.forEach((d) => logger.warn({ groupId: onchainGroupId, drift: d }, 'Drift detected'));
       return { groupId: onchainGroupId, offchainGroup, onchainGroup, drifts };
     }
 
@@ -147,7 +159,7 @@ export class ReconciliationService {
       FieldMismatch: 0,
       MemberSetMismatch: 0,
     };
-    
+
     // Scan Phase - No Writes
     const rawReports: GroupDriftReport[] = [];
 
@@ -173,8 +185,8 @@ export class ReconciliationService {
     }
 
     // Process counts
-    const cleanedReports = rawReports.map(r => {
-      r.drifts.forEach(d => {
+    const cleanedReports = rawReports.map((r) => {
+      r.drifts.forEach((d) => {
         driftCounts[d.type] = (driftCounts[d.type] || 0) + 1;
       });
       return { groupId: r.groupId, drifts: r.drifts };
@@ -188,13 +200,13 @@ export class ReconciliationService {
 
         for (const report of rawReports) {
           const { offchainGroup, onchainGroup, drifts } = report;
-          
-          if (drifts.some(d => d.type === 'MissingOnChain')) {
+
+          if (drifts.some((d) => d.type === 'MissingOnChain')) {
             // Delete offchain
             if (offchainGroup) {
               await client.query('DELETE FROM groups WHERE id = $1', [offchainGroup.id]);
             }
-          } else if (drifts.some(d => d.type === 'MissingOffChain')) {
+          } else if (drifts.some((d) => d.type === 'MissingOffChain')) {
             // Create offchain from onchain
             if (onchainGroup) {
               // Ensure user
@@ -212,22 +224,22 @@ export class ReconciliationService {
 
               for (const member of onchainGroup.members) {
                 await client.query(
-                  `INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)`,
+                  'INSERT INTO members (group_id, member_address, percentage) VALUES ($1, $2, $3)',
                   [groupId, member.address, parseFloat(bpsToPercent(member.shareBps))]
                 );
               }
             }
           } else if (offchainGroup && onchainGroup) {
             // Field mismatch
-            if (drifts.some(d => d.type === 'FieldMismatch')) {
-              await client.query(
-                'UPDATE groups SET token = $1 WHERE id = $2',
-                [onchainGroup.token, offchainGroup.id]
-              );
+            if (drifts.some((d) => d.type === 'FieldMismatch')) {
+              await client.query('UPDATE groups SET token = $1 WHERE id = $2', [
+                onchainGroup.token,
+                offchainGroup.id,
+              ]);
             }
-            
+
             // MemberSet mismatch
-            if (drifts.some(d => d.type === 'MemberSetMismatch')) {
+            if (drifts.some((d) => d.type === 'MemberSetMismatch')) {
               await client.query('DELETE FROM members WHERE group_id = $1', [offchainGroup.id]);
               for (const member of onchainGroup.members) {
                 await client.query(
@@ -239,7 +251,7 @@ export class ReconciliationService {
           }
         }
         await client.query('COMMIT');
-        
+
         // After repair, reset drifts as they were repaired
         // Issue says: "Repair is idempotent: the second run reports zero drift."
         // We still return the pre-repair report for logging, but record it.
@@ -252,12 +264,18 @@ export class ReconciliationService {
     }
 
     const endTime = new Date();
-    
+
     // Audit trail
     await query(
       `INSERT INTO reconciliation_runs (start_time, end_time, groups_scanned, drift_counts, report)
        VALUES ($1, $2, $3, $4, $5)`,
-      [startTime, endTime, groupsScanned, JSON.stringify(driftCounts), JSON.stringify(cleanedReports)]
+      [
+        startTime,
+        endTime,
+        groupsScanned,
+        JSON.stringify(driftCounts),
+        JSON.stringify(cleanedReports),
+      ]
     );
 
     // Update health stats
@@ -276,6 +294,8 @@ export class ReconciliationService {
 
 import { SorobanChainReader } from './contractReader.js';
 export const reconciliationService = new ReconciliationService(
-  new SorobanChainReader(process.env.SOROBAN_RPC_URL || 'https://rpc-testnet.stellar.org', process.env.CONTRACT_ID || '')
+  new SorobanChainReader(
+    process.env.SOROBAN_RPC_URL || 'https://rpc-testnet.stellar.org',
+    process.env.CONTRACT_ID || ''
+  )
 );
-

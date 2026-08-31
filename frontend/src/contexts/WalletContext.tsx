@@ -1,21 +1,11 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { WalletAdapter, WalletStatus, StellarNetwork } from '@/lib/wallet/types';
 import { createFreighterAdapter } from '@/lib/wallet/freighter';
 import { authenticateWithWallet } from '@/lib/auth/auth';
-import {
-  scheduleRefresh,
-  resetRefreshState,
-} from '@/lib/auth/refresh';
+import { scheduleRefresh, resetRefreshState } from '@/lib/auth/refresh';
 import { setAccessToken } from '@/lib/api/client';
 
 interface WalletContextValue {

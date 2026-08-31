@@ -57,17 +57,17 @@ describe('GroupWizard navigation and persistence', () => {
   describe('step navigation', () => {
     it('should move to next step when clicking Next button', async () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       // Fill in required details
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       const tokenInput = screen.getByLabelText('Payment Token Address');
       fireEvent.change(tokenInput, { target: { value: 'GTEST...' } });
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       fireEvent.click(nextButton);
-      
+
       await waitFor(() => {
         expect(screen.getByText('Members')).toBeInTheDocument();
       });
@@ -75,56 +75,56 @@ describe('GroupWizard navigation and persistence', () => {
 
     it('should disable Next button when step is invalid', () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       expect(nextButton).toBeDisabled();
     });
 
     it('should move to previous step when clicking Back button', async () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       // Fill details and go to next step
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       const tokenInput = screen.getByLabelText('Payment Token Address');
       fireEvent.change(tokenInput, { target: { value: 'GTEST...' } });
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       fireEvent.click(nextButton);
-      
+
       await waitFor(() => {
         expect(screen.getByText('Members')).toBeInTheDocument();
       });
-      
+
       // Go back
       const backButton = screen.getByLabelText('Go to previous step');
       fireEvent.click(backButton);
-      
+
       expect(screen.getByText('Details')).toBeInTheDocument();
     });
 
     it('should allow clicking on completed steps to navigate back', async () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       // Fill details and go to next step
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       const tokenInput = screen.getByLabelText('Payment Token Address');
       fireEvent.change(tokenInput, { target: { value: 'GTEST...' } });
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       fireEvent.click(nextButton);
-      
+
       await waitFor(() => {
         expect(screen.getByText('Members')).toBeInTheDocument();
       });
-      
+
       // Click on step 1 to go back
       const step1Button = screen.getByLabelText('Go to details step');
       fireEvent.click(step1Button);
-      
+
       expect(screen.getByText('Details')).toBeInTheDocument();
     });
   });
@@ -132,10 +132,10 @@ describe('GroupWizard navigation and persistence', () => {
   describe('sessionStorage persistence', () => {
     it('should save state to sessionStorage on state change', () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       expect(mockSessionStorage.setItem).toHaveBeenCalled();
       expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
         'group-wizard-state',
@@ -154,11 +154,11 @@ describe('GroupWizard navigation and persistence', () => {
         members: [],
         isEditMode: false,
       };
-      
+
       mockSessionStorage.getItem.mockReturnValue(JSON.stringify(savedState));
-      
+
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       expect(screen.getByText('Members')).toBeInTheDocument();
     });
 
@@ -181,37 +181,37 @@ describe('GroupWizard navigation and persistence', () => {
         ],
         isEditMode: false,
       };
-      
+
       mockSessionStorage.getItem.mockReturnValue(JSON.stringify(savedState));
-      
+
       const mockSubmit = jest.fn().mockResolvedValue(undefined);
       render(<GroupWizard onSubmit={mockSubmit} />);
-      
+
       // Navigate to review step
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       const tokenInput = screen.getByLabelText('Payment Token Address');
       fireEvent.change(tokenInput, { target: { value: 'GTEST...' } });
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       fireEvent.click(nextButton);
-      
+
       await waitFor(() => {
         expect(screen.getByText('Members')).toBeInTheDocument();
       });
-      
+
       const nextButton2 = screen.getByLabelText('Go to next step');
       fireEvent.click(nextButton2);
-      
+
       await waitFor(() => {
         expect(screen.getByText(/Create Group/)).toBeInTheDocument();
       });
-      
+
       // Submit
       const submitButton = screen.getByLabelText('Submit and sign');
       fireEvent.click(submitButton);
-      
+
       await waitFor(() => {
         expect(mockSessionStorage.removeItem).toHaveBeenCalledWith('group-wizard-state');
       });
@@ -221,7 +221,7 @@ describe('GroupWizard navigation and persistence', () => {
   describe('URL state persistence', () => {
     it('should update URL with step parameter', () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       expect(mockReplaceState).toHaveBeenCalled();
     });
 
@@ -235,11 +235,11 @@ describe('GroupWizard navigation and persistence', () => {
   describe('browser back button support', () => {
     it('should handle popstate event to move to previous step', () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       // Simulate browser back button
       const popStateEvent = new PopStateEvent('popstate', { state: { step: 'details' } });
       window.dispatchEvent(popStateEvent);
-      
+
       // The wizard should handle this event
       expect(window.history.back).toBeDefined();
     });
@@ -248,22 +248,22 @@ describe('GroupWizard navigation and persistence', () => {
   describe('step validation', () => {
     it('should require name, token, and usage count for details step', () => {
       render(<GroupWizard onSubmit={jest.fn()} />);
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       expect(nextButton).toBeDisabled();
-      
+
       // Fill name only
       const nameInput = screen.getByLabelText('Group Name');
       fireEvent.change(nameInput, { target: { value: 'Test Group' } });
-      
+
       expect(nextButton).toBeDisabled();
-      
+
       // Fill token
       const tokenInput = screen.getByLabelText('Payment Token Address');
       fireEvent.change(tokenInput, { target: { value: 'GTEST...' } });
-      
+
       expect(nextButton).toBeDisabled();
-      
+
       // Fill usage count (already has default value of 1)
       expect(nextButton).toBeEnabled();
     });
@@ -279,9 +279,9 @@ describe('GroupWizard navigation and persistence', () => {
         members: [],
         isEditMode: false,
       };
-      
+
       render(<GroupWizard onSubmit={jest.fn()} initialState={initialState} />);
-      
+
       const nextButton = screen.getByLabelText('Go to next step');
       expect(nextButton).toBeDisabled();
     });
@@ -308,9 +308,9 @@ describe('GroupWizard navigation and persistence', () => {
         isEditMode: true,
         groupId: 'test-id',
       };
-      
+
       render(<GroupWizard onSubmit={jest.fn()} initialState={initialState} />);
-      
+
       expect(screen.getByText('Update Group')).toBeInTheDocument();
     });
 
@@ -333,9 +333,9 @@ describe('GroupWizard navigation and persistence', () => {
         ],
         isEditMode: false,
       };
-      
+
       render(<GroupWizard onSubmit={jest.fn()} initialState={initialState} />);
-      
+
       expect(screen.getByText('Create Group')).toBeInTheDocument();
     });
   });

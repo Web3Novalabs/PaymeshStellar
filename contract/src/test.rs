@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger as _},
@@ -96,8 +94,7 @@ fn setup_env_with_group(
     );
 
     let mut members = Vec::new(env);
-    if num_members > 0 {
-        let pct_per_member = 10000 / num_members;
+    if let Some(pct_per_member) = 10000u32.checked_div(num_members) {
         let mut total_pct = 0;
         for i in 0..num_members {
             let pct = if i == num_members - 1 {

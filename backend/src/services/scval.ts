@@ -23,7 +23,9 @@ export class ScValDecodeError extends Error {
  * every event this contract emits. Used to build the getEvents topic filter
  * so RPC only ever sends us events in this contract's namespace.
  */
-export const AUTOSHARE_TOPIC_XDR: string = nativeToScVal('autoshare', { type: 'symbol' }).toXDR('base64');
+export const AUTOSHARE_TOPIC_XDR: string = nativeToScVal('autoshare', { type: 'symbol' }).toXDR(
+  'base64'
+);
 
 function isBytesLike(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array || Buffer.isBuffer(value);
@@ -124,14 +126,17 @@ export function decodeGroupDetails(val: xdr.ScVal): DecodedGroupDetails {
 
   if (!isBytesLike(id)) throw new ScValDecodeError('AutoShareDetails.id is not bytes');
   if (typeof name !== 'string') throw new ScValDecodeError('AutoShareDetails.name is not a string');
-  if (typeof creator !== 'string') throw new ScValDecodeError('AutoShareDetails.creator is not an address');
+  if (typeof creator !== 'string')
+    throw new ScValDecodeError('AutoShareDetails.creator is not an address');
   if (typeof paymentToken !== 'string') {
     throw new ScValDecodeError('AutoShareDetails.payment_token is not an address');
   }
-  if (!Array.isArray(members)) throw new ScValDecodeError('AutoShareDetails.members is not an array');
+  if (!Array.isArray(members))
+    throw new ScValDecodeError('AutoShareDetails.members is not an array');
 
   const decodedMembers: DecodedGroupMember[] = members.map((m, idx) => {
-    if (!isPlainRecord(m)) throw new ScValDecodeError(`AutoShareDetails.members[${idx}] is not a struct`);
+    if (!isPlainRecord(m))
+      throw new ScValDecodeError(`AutoShareDetails.members[${idx}] is not a struct`);
     const { address, name: memberName, percentage } = m;
     if (typeof address !== 'string') {
       throw new ScValDecodeError(`AutoShareDetails.members[${idx}].address is not an address`);

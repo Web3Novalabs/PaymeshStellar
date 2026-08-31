@@ -45,7 +45,9 @@ export default function SharePreview({ members, sampleAmount = 10000 }: SharePre
         </div>
       ) : shares.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <p className="text-sm text-gray-600">Enter a sample amount to see distribution preview.</p>
+          <p className="text-sm text-gray-600">
+            Enter a sample amount to see distribution preview.
+          </p>
         </div>
       ) : (
         <>
@@ -109,9 +111,9 @@ export default function SharePreview({ members, sampleAmount = 10000 }: SharePre
           {/* Verification note */}
           <div className="rounded-lg border border-green-200 bg-green-50 p-3">
             <p className="text-xs text-green-800">
-              <strong>Verification:</strong> Total distributed ({totalDistributed.toLocaleString()}) matches sample
-              amount ({amount.toLocaleString()}). This preview uses the same floor-division and final-member dust
-              allocation as the smart contract.
+              <strong>Verification:</strong> Total distributed ({totalDistributed.toLocaleString()})
+              matches sample amount ({amount.toLocaleString()}). This preview uses the same
+              floor-division and final-member dust allocation as the smart contract.
             </p>
           </div>
         </>

@@ -312,9 +312,10 @@ describe('GET /api/transactions', () => {
     const res2 = await request(app)
       .get('/api/transactions?group_id=' + groupId + '&limit=150')
       .set('Authorization', `Bearer ${token1}`)
-      .expect(200);
+      .expect(400);
 
-    assert.strictEqual(res2.body.pagination.limit, 100); // Capped at 100
+    assert.strictEqual(res2.body.success, false);
+    assert.strictEqual(res2.body.error.code, 'BAD_REQUEST');
   });
 
   it('returns 400 for non-numeric limit', async () => {
@@ -325,7 +326,7 @@ describe('GET /api/transactions', () => {
 
     assert.strictEqual(res.body.success, false);
     assert.strictEqual(res.body.error.code, 'BAD_REQUEST');
-    assert.match(res.body.error.message, /limit.*positive integer/);
+    assert.match(res.body.error.message, /limit/);
   });
 
   it('returns 400 for limit less than 1', async () => {

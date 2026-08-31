@@ -28,7 +28,8 @@ export interface EventPage {
   cursor: string;
 }
 
-export type EventsFrom = { type: 'ledger'; ledger: number } | { type: 'cursor'; pagingToken: string };
+export type EventsFrom =
+  { type: 'ledger'; ledger: number } | { type: 'cursor'; pagingToken: string };
 
 export interface GetEventsParams {
   contractId: string;
@@ -73,7 +74,8 @@ export interface SorobanEventsClient {
   getGroupLedgerEntry(contractId: string, groupIdHex: string): Promise<xdr.ScVal | null>;
 }
 
-const RETENTION_ERROR_PATTERN = /before oldest ledger|outside the ledger range|ledger range|startLedger/i;
+const RETENTION_ERROR_PATTERN =
+  /before oldest ledger|outside the ledger range|ledger range|startLedger/i;
 
 export class RpcSorobanEventsClient implements SorobanEventsClient {
   private server: rpc.Server;

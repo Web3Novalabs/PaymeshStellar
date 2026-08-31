@@ -2,9 +2,11 @@ import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import type { NextFunction, Response } from 'express';
 import request from 'supertest';
+import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { app } from '../../index.js';
+import { authConfig } from '../../config/auth.js';
 import { challengesService } from '../../services/challenges.js';
-import { stellarSignatureVerifier } from '../../utils/stellar.js';
+import { accountAuthService } from '../../services/sep10.js';
 import { signToken, verifyToken } from '../../utils/jwt.js';
 import { requireAuth, type AuthenticatedRequest } from '../auth.js';
 
@@ -13,6 +15,7 @@ process.env.JWT_SECRET = 'test-secret-key-32-characters-minimum';
 
 const ADDRESS = 'GDQOMSFX2N6HXZI5V3QZ3E36XW4B2DOKWZ4C3G42NIXQDX722Y6M42SU';
 const OTHER_ADDRESS = 'GAYO55R3JM3OHUB7W52QO7P6CDH5P3WTAF4V6QG4EIVTT6OJZIMIC75W';
+const wallet = Keypair.random();
 
 function issueToken(payload: Record<string, unknown> = {}): string {
   return signToken({ sub: ADDRESS, address: ADDRESS, ...payload });
@@ -71,9 +74,9 @@ describe('verifyToken (JWT signing & verification)', () => {
   });
 
   it('rejects a token with the wrong number of segments', () => {
-    assert.throws(() => verifyToken('only-one-segment'), /format/i);
-    assert.throws(() => verifyToken('two.segments'), /format/i);
-    assert.throws(() => verifyToken('four.segments.in.a.row'), /format/i);
+    assert.throws(() => verifyToken('only-one-segment'), /malformed|format/i);
+    assert.throws(() => verifyToken('two.segments'), /malformed|format/i);
+    assert.throws(() => verifyToken('four.segments.in.a.row'), /malformed|format/i);
   });
 
   it('rejects a tampered signature', () => {
@@ -225,23 +228,38 @@ describe('requireAuth via protected route (integration)', () => {
 });
 
 describe('wallet authentication flow (challenge → verify → JWT)', () => {
-  it('issues a JWT for a valid signature and authorizes a protected route', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => true);
+  function signChallenge(xdr: string, signer: Keypair): string {
+    const tx = TransactionBuilder.fromXDR(xdr, authConfig().networkPassphrase);
+    tx.sign(signer);
+    return tx.toXDR();
+  }
 
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: ADDRESS });
+  function mockAccount(keypair: Keypair): void {
+    mock.method(accountAuthService, 'load', async () => ({
+      mediumThreshold: 1,
+      signers: [{ key: keypair.publicKey(), weight: 1, type: 'ed25519_public_key' }],
+    }));
+  }
+
+  it('issues a JWT for a valid signature and authorizes a protected route', async () => {
+    mockAccount(wallet);
+
+    const challengeRes = await request(app)
+      .post('/auth/challenge')
+      .send({ address: wallet.publicKey() });
     assert.strictEqual(challengeRes.status, 200);
-    const { nonce } = challengeRes.body.data;
+    const signed = signChallenge(challengeRes.body.data.transaction, wallet);
 
     const verifyRes = await request(app)
       .post('/auth/verify')
-      .send({ address: ADDRESS, nonce, signature: 'ZmFrZS1zaWduYXR1cmU=' })
+      .send({ transaction: signed })
       .expect(200);
     assert.strictEqual(verifyRes.body.success, true);
-    assert.strictEqual(verifyRes.body.data.address, ADDRESS);
+    assert.strictEqual(verifyRes.body.data.address, wallet.publicKey());
     assert.strictEqual(typeof verifyRes.body.data.token, 'string');
 
     const decoded = verifyToken(verifyRes.body.data.token);
-    assert.strictEqual(decoded.sub, ADDRESS);
+    assert.strictEqual(decoded.sub, wallet.publicKey());
 
     const protectedRes = await request(app)
       .get('/api/groups')
@@ -251,36 +269,35 @@ describe('wallet authentication flow (challenge → verify → JWT)', () => {
   });
 
   it('rejects an invalid signature with 401 and a clear error shape', async () => {
-    mock.method(stellarSignatureVerifier, 'verify', () => false);
+    mockAccount(wallet);
 
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: ADDRESS });
-    const { nonce } = challengeRes.body.data;
+    const challengeRes = await request(app)
+      .post('/auth/challenge')
+      .send({ address: wallet.publicKey() });
+    const unsigned = challengeRes.body.data.transaction;
 
-    const res = await request(app)
-      .post('/auth/verify')
-      .send({ address: ADDRESS, nonce, signature: 'YmFkLXNpZ25hdHVyZQ==' })
-      .expect(401);
+    const res = await request(app).post('/auth/verify').send({ transaction: unsigned }).expect(401);
 
     assert.strictEqual(res.body.success, false);
     assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
     assert.strictEqual(typeof res.body.error.message, 'string');
   });
 
-  it('verifies the signature against the challenge message for the claimed address', async () => {
-    const verifyMock = mock.method(stellarSignatureVerifier, 'verify', () => true);
+  it('rejects a challenge signed by a different keypair', async () => {
+    mockAccount(wallet);
+    const other = Keypair.random();
 
-    const challengeRes = await request(app).post('/auth/challenge').send({ address: ADDRESS });
-    const { nonce, message } = challengeRes.body.data;
+    const challengeRes = await request(app)
+      .post('/auth/challenge')
+      .send({ address: wallet.publicKey() });
+    const signedByOther = signChallenge(challengeRes.body.data.transaction, other);
 
-    await request(app)
+    const res = await request(app)
       .post('/auth/verify')
-      .send({ address: ADDRESS, nonce, signature: 'ZmFrZQ==' })
-      .expect(200);
+      .send({ transaction: signedByOther })
+      .expect(401);
 
-    assert.strictEqual(verifyMock.mock.calls.length, 1);
-    const args = verifyMock.mock.calls[0].arguments;
-    assert.strictEqual(args[0], ADDRESS);
-    assert.strictEqual(args[1], message);
-    assert.strictEqual(typeof args[2], 'string');
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.error.code, 'UNAUTHORIZED');
   });
 });
