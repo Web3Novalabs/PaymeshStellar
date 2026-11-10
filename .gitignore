@@ -8,12 +8,9 @@ build
 *.wasm
 
 # Environment variables
-.env
-.env.local
 .env.*.local
 
 # IDE
-.vscode
 .idea
 *.swp
 *.swo
@@ -52,3 +49,4 @@ Cargo.lock
 
 # Pull request notes
 pr-*.md
+config.bat
